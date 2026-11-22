@@ -1,18 +1,51 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useRealtimeOrders } from '@/hooks/useRealtimeOrders';
 import { updateOrderStatusAction } from '@/app/actions/orders';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChefHat, Clock, CheckCircle2, Flame, Utensils, Loader2 } from 'lucide-react';
 import { OrderStatus } from '@/types/database';
 import { toast } from 'sonner';
-import { useState } from 'react';
 
 export default function KitchenPage() {
-  const { orders } = useRealtimeOrders();
+  const { orders, subscriptionStatus } = useRealtimeOrders();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Group all table orders by created_at ascending to calculate Round N
+  const tableOrderPositions = useMemo(() => {
+    const map: Record<string, { round: number; totalRounds: number }> = {};
+    const ordersByTable: Record<string, typeof orders> = {};
+
+    orders.forEach((o) => {
+      if (!ordersByTable[o.table_id]) {
+        ordersByTable[o.table_id] = [];
+      }
+      ordersByTable[o.table_id].push(o);
+    });
+
+    Object.values(ordersByTable).forEach((tableOrders) => {
+      // Sort table orders chronologically ascending
+      tableOrders.sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      const totalRounds = tableOrders.length;
+      tableOrders.forEach((o, index) => {
+        map[o.id] = { round: index + 1, totalRounds };
+      });
+    });
+
+    return map;
+  }, [orders]);
+
+  // Hide tickets with status 'served'. Sort by created_at ascending.
+  const openKitchenOrders = useMemo(() => {
+    return orders
+      .filter((o) => o.status === 'new' || o.status === 'preparing' || o.status === 'ready')
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }, [orders]);
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
     setUpdatingId(orderId);
@@ -20,9 +53,8 @@ export default function KitchenPage() {
       const res = await updateOrderStatusAction(orderId, nextStatus);
       if (res?.error) {
         toast.error('Failed to advance order status', { description: res.error });
-      } else {
-        toast.success(`Order ticket advanced to "${nextStatus.toUpperCase()}"!`);
       }
+      // Success toast removed as instructed
     } catch {
       toast.error('Error advancing status.');
     } finally {
@@ -47,19 +79,15 @@ export default function KitchenPage() {
       case 'ready':
         return (
           <Badge variant="success" className="text-xs font-bold">
-            Ready for Service
-          </Badge>
-        );
-      case 'served':
-        return (
-          <Badge variant="secondary" className="text-xs font-bold">
-            Served
+            Ready
           </Badge>
         );
       default:
         return null;
     }
   };
+
+  const isSubscribed = subscriptionStatus === 'SUBSCRIBED';
 
   return (
     <div className="space-y-6">
@@ -74,37 +102,50 @@ export default function KitchenPage() {
               Kitchen Display System (KDS)
             </h1>
             <p className="text-xs md:text-sm text-muted-foreground">
-              Real-time WebSocket feed of open dining tickets
+              Open orders, updating live
             </p>
           </div>
         </div>
 
+        {/* Realtime Subscription Status Indicator */}
         <div className="flex items-center gap-2">
           <span className="flex h-3 w-3 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            {isSubscribed && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            )}
+            <span
+              className={`relative inline-flex rounded-full h-3 w-3 ${
+                isSubscribed ? 'bg-emerald-500' : 'bg-red-500'
+              }`}
+            ></span>
           </span>
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-            Realtime Connected
+          <span
+            className={`text-xs font-bold uppercase tracking-wider ${
+              isSubscribed ? 'text-emerald-400' : 'text-red-400'
+            }`}
+          >
+            {isSubscribed ? 'Realtime Connected' : 'Reconnecting'}
           </span>
         </div>
       </div>
 
       {/* Orders Grid */}
-      {orders.length === 0 ? (
+      {openKitchenOrders.length === 0 ? (
         <Card className="flex flex-col items-center justify-center border-dashed py-16 text-center">
           <Utensils className="h-12 w-12 text-muted-foreground/60" />
           <h3 className="mt-4 text-base font-semibold text-foreground">
             Kitchen queue is empty
           </h3>
           <p className="mt-1 text-xs md:text-sm text-muted-foreground">
-            New orders dispatched by waiters will pop up here instantly.
+            New orders dispatched by waiters will appear here automatically.
           </p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {orders.map((order) => {
+          {openKitchenOrders.map((order) => {
             const isProcessing = updatingId === order.id;
+            const pos = tableOrderPositions[order.id];
+
             return (
               <Card
                 key={order.id}
@@ -118,9 +159,19 @@ export default function KitchenPage() {
               >
                 <div>
                   <div className="flex items-center justify-between border-b border-border pb-3">
-                    <span className="text-xl font-black text-primary">
-                      Table {order.table?.label || 'T-?'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-black text-primary">
+                        Table {order.table?.label || 'T-?'}
+                      </span>
+                      {pos && pos.totalRounds > 1 && (
+                        <Badge
+                          variant="secondary"
+                          className="text-[11px] font-bold border border-primary/30 text-primary"
+                        >
+                          Round {pos.round}
+                        </Badge>
+                      )}
+                    </div>
                     {getStatusBadge(order.status)}
                   </div>
 

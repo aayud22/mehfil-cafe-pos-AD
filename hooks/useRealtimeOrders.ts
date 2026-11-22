@@ -6,10 +6,12 @@ import { Order } from '@/types/database';
 
 export function useRealtimeOrders(initialOrders: Order[] = []) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<
+    'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR' | 'CONNECTING'
+  >('CONNECTING');
   const supabase = createClient();
 
   useEffect(() => {
-    // Initial fetch to ensure up-to-date
     async function fetchOrders() {
       const { data, error } = await supabase
         .from('orders')
@@ -19,7 +21,7 @@ export function useRealtimeOrders(initialOrders: Order[] = []) {
           order_items(*, menu_item:menu_items(*))
         `)
         .in('status', ['new', 'preparing', 'ready', 'served'])
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (!error && data) {
         setOrders(data as Order[]);
@@ -45,7 +47,16 @@ export function useRealtimeOrders(initialOrders: Order[] = []) {
           fetchOrders();
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cafe_tables' },
+        () => {
+          fetchOrders();
+        }
+      )
+      .subscribe((status) => {
+        setSubscriptionStatus(status as any);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -64,5 +75,5 @@ export function useRealtimeOrders(initialOrders: Order[] = []) {
     }
   };
 
-  return { orders, updateOrderStatus };
+  return { orders, subscriptionStatus, updateOrderStatus };
 }
