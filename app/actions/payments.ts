@@ -1,8 +1,41 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { paymentSchema, PaymentInput } from "@/schemas/payment"
+import { paymentSchema, PaymentInput, payTableSchema, PayTableInput } from "@/schemas/payment"
 import { revalidatePath } from "next/cache"
+
+type PayTableResult =
+  | { ok: true; total: number }
+  | { ok: false; error: string }
+
+export async function payTable(input: PayTableInput): Promise<PayTableResult> {
+  // Validate { table_id: uuid, mode: enum cash|upi|card } with Zod
+  const parsed = payTableSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.errors[0]?.message || "Invalid table payment payload",
+    }
+  }
+
+  const supabase = await createClient()
+
+  // Call pay_table RPC function
+  const { data, error } = await supabase.rpc("pay_table", {
+    p_table_id: parsed.data.table_id,
+    p_mode: parsed.data.mode,
+  })
+
+  if (error) {
+    return { ok: false, error: error.message }
+  }
+
+  revalidatePath("/cashier")
+  revalidatePath("/owner")
+  revalidatePath("/waiter")
+
+  return { ok: true, total: Number(data) }
+}
 
 export async function processPaymentAction(input: PaymentInput) {
   // 1. Re-validate schema on the server
