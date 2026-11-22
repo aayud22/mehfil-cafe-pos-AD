@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { canAccessRoute, ROLE_HOMES } from './lib/auth/roles';
-import { UserRole } from './types/database';
+import { canAccessRoute, HOME_BY_ROLE, Role } from './lib/auth/roles';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -57,24 +56,28 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Fetch user role from profiles
+  // Fetch verified role from profiles table
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, is_active')
     .eq('id', user.id)
     .single();
 
-  const userRole = (profile?.role as UserRole) || 'waiter';
+  if (!profile || profile.is_active === false) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
 
-  // If user hits root '/', route to their dedicated dashboard
+  const userRole = (profile.role as Role) || 'waiter';
+
+  // If user hits root '/', route to their role's home
   if (pathname === '/') {
-    const homeRoute = ROLE_HOMES[userRole] || '/waiter';
+    const homeRoute = HOME_BY_ROLE[userRole] || '/waiter';
     return NextResponse.redirect(new URL(homeRoute, request.url));
   }
 
-  // Route protection by role
+  // Route protection
   if (!canAccessRoute(userRole, pathname)) {
-    const fallbackRoute = ROLE_HOMES[userRole] || '/login';
+    const fallbackRoute = HOME_BY_ROLE[userRole] || '/login';
     return NextResponse.redirect(new URL(fallbackRoute, request.url));
   }
 

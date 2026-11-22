@@ -2,8 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { loginSchema, LoginInput } from "@/schemas/login"
-import { ROLE_HOMES } from "@/lib/auth/roles"
-import { UserRole } from "@/types/database"
+import { HOME_BY_ROLE, Role } from "@/lib/auth/roles"
 import { redirect } from "next/navigation"
 
 export async function loginAction(input: LoginInput) {
@@ -22,15 +21,19 @@ export async function loginAction(input: LoginInput) {
     return { error: error?.message || "Invalid credentials" }
   }
 
-  // Get user role
-  const { data: profile } = await supabase
+  // Fetch role on the server from the profiles table
+  const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active")
     .eq("id", data.user.id)
     .single()
 
-  const role = (profile?.role as UserRole) || "waiter"
-  const redirectTo = ROLE_HOMES[role] || "/waiter"
+  if (profileErr || !profile || profile.is_active === false) {
+    return { error: "User profile not found or account is deactivated" }
+  }
+
+  const role = (profile.role as Role) || "waiter"
+  const redirectTo = HOME_BY_ROLE[role] || "/waiter"
 
   return { success: true, redirectTo }
 }

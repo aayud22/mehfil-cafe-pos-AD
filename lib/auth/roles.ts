@@ -1,14 +1,25 @@
-import { UserRole } from '@/types/database';
+export type Role = 'owner' | 'manager' | 'cashier' | 'kitchen' | 'waiter';
 
-export const ROLE_HOMES: Record<UserRole, string> = {
+export type UserRole = Role; // Alias for backward compatibility
+
+export interface NavItem {
+  href: string;
+  label: string;
+  iconName: 'dashboard' | 'menu' | 'tables' | 'expenses' | 'waiter' | 'kitchen' | 'cashier';
+  roles: Role[];
+}
+
+export const HOME_BY_ROLE: Record<Role, string> = {
   owner: '/owner',
-  manager: '/manager/menu',
+  manager: '/owner',
   cashier: '/cashier',
   kitchen: '/kitchen',
   waiter: '/waiter',
 };
 
-export const ROLE_LABELS: Record<UserRole, string> = {
+export const ROLE_HOMES = HOME_BY_ROLE;
+
+export const ROLE_LABELS: Record<Role, string> = {
   owner: 'Cafe Owner',
   manager: 'Branch Manager',
   cashier: 'Cashier / POS',
@@ -16,27 +27,76 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   waiter: 'Floor Waiter',
 };
 
-export function canAccessRoute(role: UserRole, pathname: string): boolean {
-  if (role === 'owner') return true; // Owner can see everything
+export const NAV_ITEMS: NavItem[] = [
+  {
+    href: '/owner',
+    label: 'Owner Dashboard',
+    iconName: 'dashboard',
+    roles: ['owner', 'manager'],
+  },
+  {
+    href: '/manager/menu',
+    label: 'Menu Catalog',
+    iconName: 'menu',
+    roles: ['owner', 'manager'],
+  },
+  {
+    href: '/manager/tables',
+    label: 'Tables Layout',
+    iconName: 'tables',
+    roles: ['owner', 'manager'],
+  },
+  {
+    href: '/manager/expenses',
+    label: 'Daily Expenses',
+    iconName: 'expenses',
+    roles: ['owner', 'manager'],
+  },
+  {
+    href: '/waiter',
+    label: 'Floor POS',
+    iconName: 'waiter',
+    roles: ['waiter', 'owner', 'manager'],
+  },
+  {
+    href: '/kitchen',
+    label: 'Kitchen Display (KDS)',
+    iconName: 'kitchen',
+    roles: ['kitchen', 'owner', 'manager'],
+  },
+  {
+    href: '/cashier',
+    label: 'Cashier Billing',
+    iconName: 'cashier',
+    roles: ['cashier', 'owner', 'manager'],
+  },
+];
+
+export function navForRole(role: Role): NavItem[] {
+  return NAV_ITEMS.filter((item) => item.roles.includes(role));
+}
+
+export function canAccessRoute(role: Role, pathname: string): boolean {
+  if (role === 'owner' || role === 'manager') return true;
 
   if (pathname.startsWith('/owner')) {
     return false;
   }
 
   if (pathname.startsWith('/manager')) {
-    return role === 'manager';
+    return false;
   }
 
   if (pathname.startsWith('/kitchen')) {
-    return role === 'kitchen' || role === 'manager';
+    return role === 'kitchen';
   }
 
   if (pathname.startsWith('/cashier')) {
-    return role === 'cashier' || role === 'manager';
+    return role === 'cashier';
   }
 
   if (pathname.startsWith('/waiter')) {
-    return role === 'waiter' || role === 'cashier' || role === 'manager';
+    return role === 'waiter';
   }
 
   return true;

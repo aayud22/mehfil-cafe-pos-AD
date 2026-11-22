@@ -1,8 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { ROLE_LABELS } from '@/lib/auth/roles';
-import { UserRole } from '@/types/database';
+import {
+  Role,
+  ROLE_LABELS,
+  navForRole,
+  HOME_BY_ROLE,
+  NavItem,
+} from '@/lib/auth/roles';
 import { signOutAction } from '@/app/actions/auth';
 import {
   Coffee,
@@ -40,116 +45,114 @@ export default async function AppLayout({
     redirect('/login');
   }
 
+  // Fetch verified role directly from server profiles table (never trust client)
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single();
 
-  const role = (profile?.role as UserRole) || 'waiter';
+  if (!profile || profile.is_active === false) {
+    redirect('/login');
+  }
 
-  const NavItems = () => (
+  const role = (profile.role as Role) || 'waiter';
+  const roleNavItems = navForRole(role);
+  const isSingleItemRole = roleNavItems.length <= 1;
+
+  const renderIcon = (iconName: NavItem['iconName']) => {
+    switch (iconName) {
+      case 'dashboard':
+        return <LayoutDashboard className="h-5 w-5 text-amber-500 shrink-0" />;
+      case 'menu':
+        return <UtensilsCrossed className="h-5 w-5 text-blue-500 shrink-0" />;
+      case 'tables':
+        return <Grid className="h-5 w-5 text-emerald-500 shrink-0" />;
+      case 'expenses':
+        return <Wallet className="h-5 w-5 text-rose-500 shrink-0" />;
+      case 'waiter':
+        return <Grid className="h-5 w-5 text-purple-500 shrink-0" />;
+      case 'kitchen':
+        return <ChefHat className="h-5 w-5 text-amber-500 shrink-0" />;
+      case 'cashier':
+        return <Receipt className="h-5 w-5 text-emerald-500 shrink-0" />;
+    }
+  };
+
+  const NavList = () => (
     <div className="space-y-1">
-      {(role === 'owner' || role === 'manager') && (
-        <Link href="/owner" className="block">
+      {roleNavItems.map((item) => (
+        <Link key={item.href} href={item.href} className="block">
           <Button
             variant="ghost"
             className="w-full h-11 justify-start gap-3 text-sm font-medium"
           >
-            <LayoutDashboard className="h-5 w-5 text-amber-500 shrink-0" />
-            <span>Owner Dashboard</span>
+            {renderIcon(item.iconName)}
+            <span>{item.label}</span>
           </Button>
         </Link>
-      )}
-
-      {(role === 'owner' || role === 'manager') && (
-        <>
-          <Link href="/manager/menu" className="block">
-            <Button
-              variant="ghost"
-              className="w-full h-11 justify-start gap-3 text-sm font-medium"
-            >
-              <UtensilsCrossed className="h-5 w-5 text-blue-500 shrink-0" />
-              <span>Menu Catalog</span>
-            </Button>
-          </Link>
-          <Link href="/manager/tables" className="block">
-            <Button
-              variant="ghost"
-              className="w-full h-11 justify-start gap-3 text-sm font-medium"
-            >
-              <Grid className="h-5 w-5 text-emerald-500 shrink-0" />
-              <span>Tables Layout</span>
-            </Button>
-          </Link>
-          <Link href="/manager/expenses" className="block">
-            <Button
-              variant="ghost"
-              className="w-full h-11 justify-start gap-3 text-sm font-medium"
-            >
-              <Wallet className="h-5 w-5 text-rose-500 shrink-0" />
-              <span>Daily Expenses</span>
-            </Button>
-          </Link>
-        </>
-      )}
-
-      <Link href="/waiter" className="block">
-        <Button
-          variant="ghost"
-          className="w-full h-11 justify-start gap-3 text-sm font-medium"
-        >
-          <Grid className="h-5 w-5 text-purple-500 shrink-0" />
-          <span>Waiter Floor POS</span>
-        </Button>
-      </Link>
-
-      <Link href="/kitchen" className="block">
-        <Button
-          variant="ghost"
-          className="w-full h-11 justify-start gap-3 text-sm font-medium"
-        >
-          <ChefHat className="h-5 w-5 text-amber-500 shrink-0" />
-          <span>Kitchen Display (KDS)</span>
-        </Button>
-      </Link>
-
-      <Link href="/cashier" className="block">
-        <Button
-          variant="ghost"
-          className="w-full h-11 justify-start gap-3 text-sm font-medium"
-        >
-          <Receipt className="h-5 w-5 text-emerald-500 shrink-0" />
-          <span>Cashier Billing</span>
-        </Button>
-      </Link>
+      ))}
     </div>
   );
 
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground md:flex-row">
-      {/* Mobile Top Header (360px+ friendly) */}
-      <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow">
-            <Coffee className="h-5 w-5" />
+      {/* Mobile Top Header: Slim top bar for single-item roles, hamburger for multi-item roles */}
+      {isSingleItemRole ? (
+        <header className="sticky top-0 z-40 flex h-14 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow">
+              <Coffee className="h-4 w-4" />
+            </div>
+            <div>
+              <span className="font-bold text-sm leading-none block">Mehfil Cafe</span>
+              <span className="text-[10px] text-primary font-semibold uppercase">
+                {ROLE_LABELS[role] || role}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="font-bold text-sm leading-none block">Mehfil Cafe</span>
-            <span className="text-[10px] text-primary font-semibold uppercase">
-              {ROLE_LABELS[role] || role}
-            </span>
-          </div>
-        </Link>
 
-        <div className="flex items-center gap-2">
+          <form action={signOutAction}>
+            <Button
+              type="submit"
+              variant="ghost"
+              size="sm"
+              className="h-9 px-2.5 text-xs text-destructive hover:bg-destructive/10"
+            >
+              <LogOut className="h-4 w-4 mr-1" />
+              <span>Sign Out</span>
+            </Button>
+          </form>
+        </header>
+      ) : (
+        <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow">
+              <Coffee className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="font-bold text-sm leading-none block">Mehfil Cafe</span>
+              <span className="text-[10px] text-primary font-semibold uppercase">
+                {ROLE_LABELS[role] || role}
+              </span>
+            </div>
+          </Link>
+
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-11 w-11" aria-label="Open Navigation Menu">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-11 w-11"
+                aria-label="Open Navigation Menu"
+              >
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-[85vw] max-w-xs p-6 flex flex-col justify-between">
+            <SheetContent
+              side="left"
+              className="w-[85vw] max-w-xs p-6 flex flex-col justify-between"
+            >
               <div>
                 <SheetHeader className="text-left pb-4">
                   <SheetTitle className="flex items-center gap-2">
@@ -166,7 +169,7 @@ export default async function AppLayout({
                   </div>
                 </SheetHeader>
                 <Separator className="my-3" />
-                <NavItems />
+                <NavList />
               </div>
 
               <div className="pt-6 border-t border-border">
@@ -183,10 +186,10 @@ export default async function AppLayout({
               </div>
             </SheetContent>
           </Sheet>
-        </div>
-      </header>
+        </header>
+      )}
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar: If role has 1 item, hides nav list and keeps brand, user card, sign out */}
       <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-border md:bg-card/60 p-4">
         <div className="flex items-center gap-3 pb-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
@@ -210,9 +213,12 @@ export default async function AppLayout({
           </Badge>
         </div>
 
-        <nav className="flex-1 space-y-1">
-          <NavItems />
-        </nav>
+        {/* If role has > 1 item, render navigation list; otherwise hide it */}
+        {!isSingleItemRole && (
+          <nav className="flex-1 space-y-1">
+            <NavList />
+          </nav>
+        )}
 
         <div className="pt-6 border-t border-border mt-auto">
           <form action={signOutAction}>
@@ -229,31 +235,47 @@ export default async function AppLayout({
       </aside>
 
       {/* Main Content View */}
-      <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-8 md:pb-8 w-full max-w-full">
+      <main
+        className={`flex-1 overflow-y-auto p-4 md:p-8 w-full max-w-full ${
+          !isSingleItemRole ? 'pb-20 md:pb-8' : 'pb-8'
+        }`}
+      >
         {children}
       </main>
 
-      {/* Mobile Bottom Navigation Bar (Fast 1-touch floor access) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-16 w-full items-center justify-around border-t border-border bg-card/95 px-2 backdrop-blur md:hidden">
-        <Link href="/waiter" className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground">
-          <Grid className="h-5 w-5" />
-          <span className="text-[10px] font-medium mt-0.5">Floor</span>
-        </Link>
-        <Link href="/kitchen" className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground">
-          <ChefHat className="h-5 w-5" />
-          <span className="text-[10px] font-medium mt-0.5">Kitchen</span>
-        </Link>
-        <Link href="/cashier" className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground">
-          <Receipt className="h-5 w-5" />
-          <span className="text-[10px] font-medium mt-0.5">Billing</span>
-        </Link>
-        {(role === 'owner' || role === 'manager') && (
-          <Link href="/owner" className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground">
+      {/* Mobile Bottom Navigation Bar (Shown only for multi-item roles: Owner/Manager) */}
+      {!isSingleItemRole && (
+        <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-16 w-full items-center justify-around border-t border-border bg-card/95 px-2 backdrop-blur md:hidden">
+          <Link
+            href="/owner"
+            className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground"
+          >
             <LayoutDashboard className="h-5 w-5" />
             <span className="text-[10px] font-medium mt-0.5">Owner</span>
           </Link>
-        )}
-      </nav>
+          <Link
+            href="/waiter"
+            className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground"
+          >
+            <Grid className="h-5 w-5" />
+            <span className="text-[10px] font-medium mt-0.5">Floor</span>
+          </Link>
+          <Link
+            href="/kitchen"
+            className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground"
+          >
+            <ChefHat className="h-5 w-5" />
+            <span className="text-[10px] font-medium mt-0.5">Kitchen</span>
+          </Link>
+          <Link
+            href="/cashier"
+            className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground"
+          >
+            <Receipt className="h-5 w-5" />
+            <span className="text-[10px] font-medium mt-0.5">Billing</span>
+          </Link>
+        </nav>
+      )}
     </div>
   );
 }
