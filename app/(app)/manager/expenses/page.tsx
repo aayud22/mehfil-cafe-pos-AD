@@ -1,52 +1,84 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { createClient } from '@/lib/supabase/client';
 import { Expense } from '@/types/database';
-import { Wallet, Plus } from 'lucide-react';
+import { expenseSchema, ExpenseInput } from '@/schemas/expense';
+import { createExpenseAction } from '@/app/actions/expenses';
+import { toast } from 'sonner';
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Wallet, Plus, Loader2, Calendar as CalendarIcon } from 'lucide-react';
 
 export default function ManagerExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [category, setCategory] = useState('');
-  const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('');
+  const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const supabase = createClient();
 
+  const form = useForm<ExpenseInput>({
+    resolver: zodResolver(expenseSchema),
+    defaultValues: {
+      expense_date: new Date().toISOString().split('T')[0],
+      category: '',
+      amount: 0,
+      note: '',
+    },
+  });
+
   const loadExpenses = async () => {
+    setLoading(true);
     const { data } = await supabase
       .from('expenses')
       .select('*')
       .order('expense_date', { ascending: false });
     if (data) setExpenses(data as Expense[]);
+    setLoading(false);
   };
 
   useEffect(() => {
     loadExpenses();
   }, []);
 
-  const handleAddExpense = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!category || !amount) return;
+  const onSubmit = async (values: ExpenseInput) => {
     setIsSubmitting(true);
-
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('expenses').insert({
-        expense_date: new Date().toISOString().split('T')[0],
-        category,
-        amount: parseFloat(amount),
-        note: note || null,
-        created_by: user?.id || null,
-      });
+      const res = await createExpenseAction(values);
+      if (res?.error) {
+        toast.error('Could not log expense', { description: res.error });
+        setIsSubmitting(false);
+        return;
+      }
 
-      setCategory('');
-      setAmount('');
-      setNote('');
+      toast.success(`Logged ₹${values.amount} under ${values.category}`);
+      form.reset({
+        expense_date: new Date().toISOString().split('T')[0],
+        category: '',
+        amount: 0,
+        note: '',
+      });
       loadExpenses();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to log expense');
+    } catch {
+      toast.error('Unexpected error logging expense.');
     } finally {
       setIsSubmitting(false);
     }
@@ -54,78 +86,168 @@ export default function ManagerExpensesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="border-b border-slate-800 pb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-white">Daily Expenses Log</h1>
-        <p className="text-xs text-slate-400">Record daily milk, produce, bakery, and operational sundries</p>
+      <div className="border-b border-border pb-4">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground">
+          Daily Expenses Log
+        </h1>
+        <p className="text-xs md:text-sm text-muted-foreground">
+          Record daily dairy, beans, produce, and operational supplies
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Form */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg">
-          <h3 className="mb-4 text-sm font-bold text-white">Log New Cafe Expense</h3>
-          <form onSubmit={handleAddExpense} className="space-y-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-400">Expense Category</label>
-              <input
-                type="text"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g. Milk & Dairy, Coffee Beans..."
-                required
-                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-800 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
+        {/* Form Card */}
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              <Plus className="h-4 w-4 text-primary" />
+              <span>Log New Expense</span>
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Every expense reduces today's net profit card in real-time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="expense_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Date</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="date"
+                          className="h-11 text-base md:text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <div>
-              <label className="text-xs font-semibold text-slate-400">Amount (₹)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                required
-                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-800 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g. Milk & Dairy, Coffee Beans"
+                          className="h-11 text-base md:text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <div>
-              <label className="text-xs font-semibold text-slate-400">Notes / Vendor</label>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. Paid in cash to Amul vendor"
-                rows={2}
-                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-800 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
+                <FormField
+                  control={form.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Amount (₹)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="h-11 text-base md:text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-xs font-semibold text-white shadow hover:bg-amber-500 disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" />
-              <span>{isSubmitting ? 'Recording...' : 'Add Expense Entry'}</span>
-            </button>
-          </form>
-        </div>
+                <FormField
+                  control={form.control}
+                  name="note"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vendor / Notes (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="e.g. Paid in cash to Amul supplier (20L)"
+                          rows={2}
+                          className="text-base md:text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-        {/* Expenses List */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg lg:col-span-2">
-          <h3 className="mb-4 text-sm font-bold text-white">Recent Cafe Expenses</h3>
-          <div className="divide-y divide-slate-800">
-            {expenses.map((exp) => (
-              <div key={exp.id} className="flex items-center justify-between py-3 text-xs">
-                <div>
-                  <p className="font-semibold text-white">{exp.category}</p>
-                  <p className="text-slate-400">{exp.expense_date} {exp.note ? `• ${exp.note}` : ''}</p>
-                </div>
-                <span className="text-sm font-bold text-rose-400">₹{Number(exp.amount).toLocaleString('en-IN')}</span>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full h-11 text-base font-semibold"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Logging Entry...
+                    </>
+                  ) : (
+                    'Record Expense Entry'
+                  )}
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+
+        {/* Expenses List: Card List on mobile instead of wide scrolling table */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-rose-500" />
+              <span>Recent Expenditures</span>
+            </CardTitle>
+            <CardDescription className="text-xs">
+              History of cafe outgoings
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Loading expenses...</p>
+            ) : expenses.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-8 text-center">
+                No expense entries found.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {expenses.map((exp) => (
+                  <div
+                    key={exp.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-border bg-card/60 p-4 shadow-sm"
+                  >
+                    <div>
+                      <p className="text-sm font-bold text-foreground">
+                        {exp.category}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {exp.expense_date} {exp.note ? `• ${exp.note}` : ''}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-base font-black text-rose-500">
+                        ₹{Number(exp.amount).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { CafeTable } from '@/types/database';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Users, Utensils, ArrowRight } from 'lucide-react';
 
 export default function WaiterFloorPage() {
@@ -30,50 +33,56 @@ export default function WaiterFloorPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Floor Tables (Waiter POS)</h1>
-        <p className="text-xs text-slate-400">Select a table to start a new dining session or add items to an existing order</p>
+      <div className="border-b border-border pb-4">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground">
+          Floor Tables (Waiter POS)
+        </h1>
+        <p className="text-xs md:text-sm text-muted-foreground">
+          Tap a table to take a mobile customer order and dispatch to KDS
+        </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">Loading floor plan...</p>
+        <p className="text-sm text-muted-foreground">Loading tables layout...</p>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {tables.map((table) => (
-            <Link
-              key={table.id}
-              href={`/waiter/orders/${table.id}`}
-              className={`flex flex-col justify-between rounded-xl border p-5 shadow-lg transition hover:scale-[1.02] ${
-                table.status === 'occupied'
-                  ? 'border-amber-600/50 bg-amber-950/20 hover:border-amber-500'
-                  : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xl font-black text-white">{table.label}</span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                    table.status === 'occupied'
-                      ? 'bg-amber-500/20 text-amber-300'
-                      : 'bg-emerald-500/20 text-emerald-300'
-                  }`}
+            <Link key={table.id} href={`/waiter/orders/${table.id}`} className="block">
+              <Card
+                className={`flex flex-col justify-between p-4 min-h-[140px] transition active:scale-[0.98] hover:border-primary/60 ${
+                  table.status === 'occupied'
+                    ? 'border-primary/60 bg-primary/10'
+                    : 'bg-card'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xl md:text-2xl font-black text-foreground">
+                    {table.label}
+                  </span>
+                  <Badge
+                    variant={table.status === 'occupied' ? 'warning' : 'success'}
+                    className="text-[10px] uppercase font-bold"
+                  >
+                    {table.status}
+                  </Badge>
+                </div>
+
+                <div className="my-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  <span>{table.seats} Seats</span>
+                </div>
+
+                <Button
+                  variant="default"
+                  className="w-full h-11 text-xs font-semibold justify-between mt-auto"
                 >
-                  {table.status}
-                </span>
-              </div>
-
-              <div className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
-                <Users className="h-4 w-4" />
-                <span>{table.seats} Seats</span>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between border-t border-slate-800/80 pt-3 text-xs font-semibold text-amber-400">
-                <span className="flex items-center gap-1">
-                  <Utensils className="h-3.5 w-3.5" />
-                  Take Order
-                </span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
+                  <span className="flex items-center gap-1.5">
+                    <Utensils className="h-4 w-4" />
+                    Take Order
+                  </span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </Card>
             </Link>
           ))}
         </div>

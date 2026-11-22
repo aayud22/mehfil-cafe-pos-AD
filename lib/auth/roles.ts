@@ -20,23 +20,23 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
   if (role === 'owner') return true; // Owner can see everything
 
   if (pathname.startsWith('/owner')) {
-    return role === 'owner';
+    return false;
   }
 
   if (pathname.startsWith('/manager')) {
-    return role === 'manager' || role === 'owner';
+    return role === 'manager';
   }
 
   if (pathname.startsWith('/kitchen')) {
-    return role === 'kitchen' || role === 'owner' || role === 'manager';
+    return role === 'kitchen' || role === 'manager';
   }
 
   if (pathname.startsWith('/cashier')) {
-    return role === 'cashier' || role === 'owner' || role === 'manager';
+    return role === 'cashier' || role === 'manager';
   }
 
   if (pathname.startsWith('/waiter')) {
-    return role === 'waiter' || role === 'cashier' || role === 'owner' || role === 'manager';
+    return role === 'waiter' || role === 'cashier' || role === 'manager';
   }
 
   return true;

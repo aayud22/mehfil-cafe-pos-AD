@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
@@ -40,9 +40,13 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Public routes
-  if (pathname === '/login' || pathname.startsWith('/_next') || pathname.startsWith('/icons') || pathname === '/manifest.json') {
+  if (
+    pathname === '/login' ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/icons') ||
+    pathname === '/manifest.json'
+  ) {
     if (user && pathname === '/login') {
-      // Redirect logged in user from /login to root (which directs to role home)
       return NextResponse.redirect(new URL('/', request.url));
     }
     return response;

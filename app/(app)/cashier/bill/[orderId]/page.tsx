@@ -2,9 +2,27 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { createClient } from '@/lib/supabase/client';
 import { Order, PaymentMode } from '@/types/database';
-import { ArrowLeft, Check, QrCode, Banknote, CreditCard } from 'lucide-react';
+import { paymentSchema, PaymentInput } from '@/schemas/payment';
+import { processPaymentAction } from '@/app/actions/payments';
+import { toast } from 'sonner';
+
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { ArrowLeft, Check, QrCode, Banknote, CreditCard, Loader2 } from 'lucide-react';
 
 export default function CashierBillPage({
   params,
@@ -16,8 +34,16 @@ export default function CashierBillPage({
   const supabase = createClient();
 
   const [order, setOrder] = useState<Order | null>(null);
-  const [selectedMode, setSelectedMode] = useState<PaymentMode>('upi');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const form = useForm<PaymentInput>({
+    resolver: zodResolver(paymentSchema),
+    defaultValues: {
+      order_id: resolvedParams.orderId,
+      mode: 'upi',
+      amount: 0,
+    },
+  });
 
   useEffect(() => {
     async function loadOrder() {
@@ -33,14 +59,24 @@ export default function CashierBillPage({
 
       if (!error && data) {
         setOrder(data as Order);
+        const computedTotal = (data.order_items || []).reduce(
+          (sum: number, item: any) => sum + Number(item.unit_price) * item.quantity,
+          0
+        );
+        form.setValue('amount', computedTotal);
+        form.setValue('order_id', data.id);
       }
     }
 
     loadOrder();
-  }, [resolvedParams.orderId, supabase]);
+  }, [resolvedParams.orderId, supabase, form]);
 
   if (!order) {
-    return <div className="p-8 text-center text-slate-400">Loading bill details...</div>;
+    return (
+      <div className="p-8 text-center text-muted-foreground text-sm">
+        Loading dining invoice details...
+      </div>
+    );
   }
 
   const totalAmount = (order.order_items || []).reduce(
@@ -48,143 +84,174 @@ export default function CashierBillPage({
     0
   );
 
-  const handleSettlePayment = async () => {
+  const onSubmit = async (values: PaymentInput) => {
     setIsProcessing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      // 1. Create payment record
-      const { error: payErr } = await supabase.from('payments').insert({
-        order_id: order.id,
-        mode: selectedMode,
-        amount: totalAmount,
-        received_by: user?.id || null,
-      });
-
-      if (payErr) throw payErr;
-
-      // 2. Mark order as billed
-      await supabase
-        .from('orders')
-        .update({ status: 'billed' })
-        .eq('id', order.id);
-
-      // 3. Free the table
-      if (order.table_id) {
-        await supabase
-          .from('cafe_tables')
-          .update({ status: 'free' })
-          .eq('id', order.table_id);
+      // Calls server action which independently recomputes order items from DB
+      // and strictly rejects if client amount does not match!
+      const res = await processPaymentAction(values);
+      if (res?.error) {
+        toast.error('Payment Settlement Rejected', { description: res.error });
+        setIsProcessing(false);
+        return;
       }
 
+      toast.success(
+        `Payment of ₹${totalAmount} recorded successfully via ${values.mode.toUpperCase()}!`
+      );
       router.push('/cashier');
-    } catch (err) {
-      console.error(err);
-      alert('Error processing payment.');
-    } finally {
+      router.refresh();
+    } catch {
+      toast.error('Unexpected error processing transaction.');
       setIsProcessing(false);
     }
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <button
+    <div className="mx-auto max-w-lg space-y-6">
+      <Button
+        variant="ghost"
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-slate-400 hover:text-white"
+        className="h-11 px-3 gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        <span>Back to Cashier Register</span>
-      </button>
+        <span>Back to Register</span>
+      </Button>
 
-      {/* Bill Receipt Card */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl backdrop-blur">
-        <div className="border-b border-dashed border-slate-700 pb-4 text-center">
-          <h2 className="text-xl font-black tracking-wide text-white">MEHFIL CAFE</h2>
-          <p className="text-xs text-slate-400">Tax Invoice / Dining Bill</p>
-          <p className="mt-1 text-xs font-semibold text-amber-400">Table: {order.table?.label}</p>
-        </div>
+      {/* Invoice Card */}
+      <Card className="shadow-2xl border-border/80">
+        <CardHeader className="text-center pb-4 border-b border-dashed border-border">
+          <Badge variant="outline" className="mx-auto mb-2 text-xs uppercase text-primary border-primary/30">
+            Official Dining Receipt
+          </Badge>
+          <CardTitle className="text-2xl font-black tracking-wide text-foreground">
+            MEHFIL CAFE
+          </CardTitle>
+          <CardDescription className="text-xs text-muted-foreground">
+            Table: {order.table?.label || 'T-?'} • Order #{order.id.slice(0, 8)}
+          </CardDescription>
+        </CardHeader>
 
-        {/* Items Table */}
-        <div className="my-6 divide-y divide-slate-800/80 text-sm">
-          {order.order_items?.map((item) => (
-            <div key={item.id} className="flex justify-between py-2 text-slate-300">
-              <div>
-                <span>{item.menu_item?.name}</span>
-                <span className="block text-xs text-slate-500">
-                  {item.quantity} x ₹{item.unit_price}
+        <CardContent className="space-y-6 pt-6">
+          {/* Card Item List */}
+          <div className="divide-y divide-border text-sm">
+            {order.order_items?.map((item) => (
+              <div key={item.id} className="flex justify-between py-2 text-sm">
+                <div>
+                  <p className="font-semibold text-foreground">{item.menu_item?.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.quantity} × ₹{item.unit_price}
+                  </p>
+                </div>
+                <span className="font-bold text-foreground">
+                  ₹{Number(item.unit_price) * item.quantity}
                 </span>
               </div>
-              <span className="font-semibold text-white">
-                ₹{Number(item.unit_price) * item.quantity}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Grand Total */}
-        <div className="border-t border-slate-700 pt-4">
-          <div className="flex items-center justify-between text-lg font-black text-white">
-            <span>Net Payable Amount:</span>
-            <span className="text-2xl text-emerald-400">₹{totalAmount.toLocaleString('en-IN')}</span>
-          </div>
-        </div>
-
-        {/* Payment Mode Selector */}
-        <div className="mt-6 border-t border-slate-800 pt-6">
-          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Select Payment Tender
-          </label>
-          <div className="mt-3 grid grid-cols-3 gap-3">
-            <button
-              type="button"
-              onClick={() => setSelectedMode('upi')}
-              className={`flex flex-col items-center justify-center rounded-xl border p-3 transition ${
-                selectedMode === 'upi'
-                  ? 'border-purple-500 bg-purple-950/40 text-purple-300 ring-1 ring-purple-500'
-                  : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:bg-slate-800'
-              }`}
-            >
-              <QrCode className="h-6 w-6" />
-              <span className="mt-2 text-xs font-bold">UPI / QR</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSelectedMode('cash')}
-              className={`flex flex-col items-center justify-center rounded-xl border p-3 transition ${
-                selectedMode === 'cash'
-                  ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300 ring-1 ring-emerald-500'
-                  : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:bg-slate-800'
-              }`}
-            >
-              <Banknote className="h-6 w-6" />
-              <span className="mt-2 text-xs font-bold">Cash</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSelectedMode('card')}
-              className={`flex flex-col items-center justify-center rounded-xl border p-3 transition ${
-                selectedMode === 'card'
-                  ? 'border-blue-500 bg-blue-950/40 text-blue-300 ring-1 ring-blue-500'
-                  : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:bg-slate-800'
-              }`}
-            >
-              <CreditCard className="h-6 w-6" />
-              <span className="mt-2 text-xs font-bold">Card</span>
-            </button>
+            ))}
           </div>
 
-          <button
-            onClick={handleSettlePayment}
-            disabled={isProcessing}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-bold text-white shadow-lg transition hover:bg-emerald-500 disabled:opacity-50"
-          >
-            <Check className="h-5 w-5" />
-            <span>{isProcessing ? 'Settling Payment...' : `Complete Bill (₹${totalAmount})`}</span>
-          </button>
-        </div>
-      </div>
+          {/* Grand Total */}
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              Grand Total:
+            </span>
+            <span className="text-2xl md:text-3xl font-black text-emerald-500">
+              ₹{totalAmount.toLocaleString('en-IN')}
+            </span>
+          </div>
+
+          {/* Payment Form */}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+              <FormField
+                control={form.control}
+                name="mode"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Select Payment Mode
+                    </FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="grid grid-cols-3 gap-2"
+                      >
+                        <FormItem>
+                          <FormControl>
+                            <div
+                              onClick={() => field.onChange('upi')}
+                              className={`flex flex-col items-center justify-center rounded-xl border p-3 cursor-pointer transition min-h-[70px] ${
+                                field.value === 'upi'
+                                  ? 'border-purple-500 bg-purple-500/10 text-purple-400 ring-2 ring-purple-500'
+                                  : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
+                              }`}
+                            >
+                              <QrCode className="h-6 w-6" />
+                              <span className="mt-1 text-xs font-bold">UPI / QR</span>
+                            </div>
+                          </FormControl>
+                        </FormItem>
+
+                        <FormItem>
+                          <FormControl>
+                            <div
+                              onClick={() => field.onChange('cash')}
+                              className={`flex flex-col items-center justify-center rounded-xl border p-3 cursor-pointer transition min-h-[70px] ${
+                                field.value === 'cash'
+                                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 ring-2 ring-emerald-500'
+                                  : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
+                              }`}
+                            >
+                              <Banknote className="h-6 w-6" />
+                              <span className="mt-1 text-xs font-bold">Cash</span>
+                            </div>
+                          </FormControl>
+                        </FormItem>
+
+                        <FormItem>
+                          <FormControl>
+                            <div
+                              onClick={() => field.onChange('card')}
+                              className={`flex flex-col items-center justify-center rounded-xl border p-3 cursor-pointer transition min-h-[70px] ${
+                                field.value === 'card'
+                                  ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-2 ring-blue-500'
+                                  : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
+                              }`}
+                            >
+                              <CreditCard className="h-6 w-6" />
+                              <span className="mt-1 text-xs font-bold">Card</span>
+                            </div>
+                          </FormControl>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button
+                type="submit"
+                disabled={isProcessing}
+                className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl gap-2 mt-4"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Validating & Settling Bill...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-5 w-5" />
+                    Complete Settlement (₹{totalAmount})
+                  </>
+                )}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
