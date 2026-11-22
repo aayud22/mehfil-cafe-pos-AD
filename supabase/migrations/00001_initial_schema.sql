@@ -2,7 +2,16 @@
 -- Mehfil Cafe Management System - Version 1 Initial Schema
 -- ==============================================================================
 
--- 1. Helper Function: Get user role from profiles
+-- 1. Profiles Table (Must be created before current_user_role() function)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('owner', 'manager', 'cashier', 'kitchen', 'waiter')),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
+);
+
+-- 2. Helper Function: Get user role from profiles
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS TEXT
 LANGUAGE sql
@@ -12,15 +21,6 @@ SET search_path = public
 AS $$
   SELECT role FROM public.profiles WHERE id = auth.uid();
 $$;
-
--- 2. Profiles Table (Extends Supabase auth.users)
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  full_name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('owner', 'manager', 'cashier', 'kitchen', 'waiter')),
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
-);
 
 -- 3. Menu Categories
 CREATE TABLE IF NOT EXISTS public.menu_categories (
@@ -124,7 +124,10 @@ BEGIN
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', 'Cafe Staff'),
     COALESCE(NEW.raw_user_meta_data->>'role', 'waiter')
-  );
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET full_name = EXCLUDED.full_name,
+      role = EXCLUDED.role;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -146,61 +149,66 @@ ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 
--- Profiles: Authenticated users can view profiles; only owners/managers can edit them
+-- 1. Profiles Policies
+DROP POLICY IF EXISTS "Profiles readable by authenticated users" ON public.profiles;
 CREATE POLICY "Profiles readable by authenticated users"
   ON public.profiles FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Profiles editable by owners" ON public.profiles;
 CREATE POLICY "Profiles editable by owners"
   ON public.profiles FOR ALL
   TO authenticated
   USING (public.current_user_role() = 'owner');
 
--- Menu Categories & Menu Items:
--- Everyone (all authenticated roles) can view menu items
+-- 2. Menu Categories Policies
+DROP POLICY IF EXISTS "Menu readable by all staff" ON public.menu_categories;
 CREATE POLICY "Menu readable by all staff"
   ON public.menu_categories FOR SELECT
   TO authenticated
   USING (true);
 
-CREATE POLICY "Menu items readable by all staff"
-  ON public.menu_items FOR SELECT
-  TO authenticated
-  USING (true);
-
+DROP POLICY IF EXISTS "Menu editable by owner and manager" ON public.menu_categories;
 CREATE POLICY "Menu editable by owner and manager"
   ON public.menu_categories FOR ALL
   TO authenticated
   USING (public.current_user_role() IN ('owner', 'manager'));
 
+-- 3. Menu Items Policies
+DROP POLICY IF EXISTS "Menu items readable by all staff" ON public.menu_items;
+CREATE POLICY "Menu items readable by all staff"
+  ON public.menu_items FOR SELECT
+  TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "Menu items editable by owner and manager" ON public.menu_items;
 CREATE POLICY "Menu items editable by owner and manager"
   ON public.menu_items FOR ALL
   TO authenticated
   USING (public.current_user_role() IN ('owner', 'manager'));
 
--- Cafe Tables:
--- Readable by all staff, editable by owner and manager, status updatable by waiter/cashier
+-- 4. Cafe Tables Policies
+DROP POLICY IF EXISTS "Tables readable by all staff" ON public.cafe_tables;
 CREATE POLICY "Tables readable by all staff"
   ON public.cafe_tables FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Tables manageable by owner and manager" ON public.cafe_tables;
 CREATE POLICY "Tables manageable by owner and manager"
   ON public.cafe_tables FOR ALL
   TO authenticated
   USING (public.current_user_role() IN ('owner', 'manager'));
 
+DROP POLICY IF EXISTS "Table status update by waiter and cashier" ON public.cafe_tables;
 CREATE POLICY "Table status update by waiter and cashier"
   ON public.cafe_tables FOR UPDATE
   TO authenticated
   USING (public.current_user_role() IN ('waiter', 'cashier'));
 
--- Orders:
--- Owner & Manager: full access
--- Kitchen: can view active/open orders, update status to preparing/ready
--- Cashier: can view orders, update status to billed
--- Waiter: can view and create orders, update status to served
+-- 5. Orders Policies
+DROP POLICY IF EXISTS "Orders read policy" ON public.orders;
 CREATE POLICY "Orders read policy"
   ON public.orders FOR SELECT
   TO authenticated
@@ -210,6 +218,7 @@ CREATE POLICY "Orders read policy"
     OR (public.current_user_role() = 'waiter')
   );
 
+DROP POLICY IF EXISTS "Orders insert policy" ON public.orders;
 CREATE POLICY "Orders insert policy"
   ON public.orders FOR INSERT
   TO authenticated
@@ -217,6 +226,7 @@ CREATE POLICY "Orders insert policy"
     public.current_user_role() IN ('owner', 'manager', 'waiter', 'cashier')
   );
 
+DROP POLICY IF EXISTS "Orders update policy" ON public.orders;
 CREATE POLICY "Orders update policy"
   ON public.orders FOR UPDATE
   TO authenticated
@@ -227,32 +237,34 @@ CREATE POLICY "Orders update policy"
     OR (public.current_user_role() = 'cashier')
   );
 
--- Order Items:
+-- 6. Order Items Policies
+DROP POLICY IF EXISTS "Order items readable by staff" ON public.order_items;
 CREATE POLICY "Order items readable by staff"
   ON public.order_items FOR SELECT
   TO authenticated
   USING (true);
 
+DROP POLICY IF EXISTS "Order items insertable by waiter and manager" ON public.order_items;
 CREATE POLICY "Order items insertable by waiter and manager"
   ON public.order_items FOR INSERT
   TO authenticated
   WITH CHECK (public.current_user_role() IN ('owner', 'manager', 'waiter', 'cashier'));
 
--- Payments:
--- Readable by owner, manager, cashier
--- Insertable by owner, manager, cashier
+-- 7. Payments Policies
+DROP POLICY IF EXISTS "Payments read policy" ON public.payments;
 CREATE POLICY "Payments read policy"
   ON public.payments FOR SELECT
   TO authenticated
   USING (public.current_user_role() IN ('owner', 'manager', 'cashier'));
 
+DROP POLICY IF EXISTS "Payments insert policy" ON public.payments;
 CREATE POLICY "Payments insert policy"
   ON public.payments FOR INSERT
   TO authenticated
   WITH CHECK (public.current_user_role() IN ('owner', 'manager', 'cashier'));
 
--- Expenses:
--- Readable and manageable by owner and manager
+-- 8. Expenses Policies
+DROP POLICY IF EXISTS "Expenses owner manager access" ON public.expenses;
 CREATE POLICY "Expenses owner manager access"
   ON public.expenses FOR ALL
   TO authenticated
@@ -326,7 +338,27 @@ BEGIN
 END;
 $$;
 
--- Enable Realtime on orders, order_items, and cafe_tables
-ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.order_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.cafe_tables;
+-- Safely add tables to Realtime publication
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'orders'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'order_items'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.order_items;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'cafe_tables'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.cafe_tables;
+  END IF;
+END $$;
