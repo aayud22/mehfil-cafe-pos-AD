@@ -6,7 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { createClient } from '@/lib/supabase/client';
 import { Expense } from '@/types/database';
 import { expenseSchema, ExpenseInput } from '@/schemas/expense';
-import { createExpenseAction } from '@/app/actions/expenses';
+import { createExpenseAction, deleteExpenseAction } from '@/app/actions/expenses';
+import { formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
 
 import {
@@ -19,6 +20,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Form,
   FormControl,
@@ -27,12 +36,39 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Wallet, Plus, Loader2, Calendar as CalendarIcon } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Wallet, Plus, Loader2, Trash2, Calendar } from 'lucide-react';
+
+const EXPENSE_CATEGORIES = [
+  'Rent',
+  'Gas',
+  'Milk & Dairy',
+  'Coffee Beans',
+  'Bakery',
+  'Vegetables',
+  'Cleaning',
+  'Salary',
+  'Other',
+];
 
 export default function ManagerExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [timeFilter, setTimeFilter] = useState<'today' | '7days'>('today');
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+
   const supabase = createClient();
 
   const form = useForm<ExpenseInput>({
@@ -40,17 +76,31 @@ export default function ManagerExpensesPage() {
     defaultValues: {
       expense_date: new Date().toISOString().split('T')[0],
       category: '',
-      amount: 0,
+      amount: '' as any, // Amount starts empty with placeholder
       note: '',
     },
   });
 
   const loadExpenses = async () => {
     setLoading(true);
+
+    // Fetch user role
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      if (profile) setCurrentUserRole(profile.role);
+    }
+
+    // Fetch expenses
     const { data } = await supabase
       .from('expenses')
       .select('*')
       .order('expense_date', { ascending: false });
+
     if (data) setExpenses(data as Expense[]);
     setLoading(false);
   };
@@ -69,11 +119,11 @@ export default function ManagerExpensesPage() {
         return;
       }
 
-      toast.success(`Logged ₹${values.amount} under ${values.category}`);
+      toast.success(`Logged ${formatCurrency(values.amount)} under ${values.category}`);
       form.reset({
         expense_date: new Date().toISOString().split('T')[0],
         category: '',
-        amount: 0,
+        amount: '' as any,
         note: '',
       });
       loadExpenses();
@@ -84,6 +134,43 @@ export default function ManagerExpensesPage() {
     }
   };
 
+  const handleDeleteExpense = async (id: string) => {
+    try {
+      const res = await deleteExpenseAction(id);
+      if (res?.error) {
+        toast.error('Delete failed', { description: res.error });
+      } else {
+        toast.success('Expense record deleted');
+        setExpenses((prev) => prev.filter((e) => e.id !== id));
+      }
+    } catch {
+      toast.error('Unexpected error deleting record');
+    } finally {
+      setExpenseToDelete(null);
+    }
+  };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Calculate Today's Total
+  const todayTotal = expenses
+    .filter((e) => e.expense_date === todayStr)
+    .reduce((sum, e) => sum + Number(e.amount), 0);
+
+  // Filtered List based on Today / Last 7 days
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+  const filteredExpenses = expenses.filter((e) => {
+    if (timeFilter === 'today') {
+      return e.expense_date === todayStr;
+    }
+    return e.expense_date >= sevenDaysAgoStr;
+  });
+
+  const isOwner = currentUserRole === 'owner';
+
   return (
     <div className="space-y-6">
       <div className="border-b border-border pb-4">
@@ -91,7 +178,7 @@ export default function ManagerExpensesPage() {
           Daily Expenses Log
         </h1>
         <p className="text-xs md:text-sm text-muted-foreground">
-          Record daily dairy, beans, produce, and operational supplies
+          Record dairy, beans, utilities, vegetables, and operational supplies
         </p>
       </div>
 
@@ -134,13 +221,20 @@ export default function ManagerExpensesPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Category</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g. Milk & Dairy, Coffee Beans"
-                          className="h-11 text-base md:text-sm"
-                          {...field}
-                        />
-                      </FormControl>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger className="h-11 text-base md:text-sm">
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {EXPENSE_CATEGORIES.map((cat) => (
+                            <SelectItem key={cat} value={cat}>
+                              {cat}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -156,8 +250,8 @@ export default function ManagerExpensesPage() {
                         <Input
                           type="number"
                           step="0.01"
-                          placeholder="0.00"
-                          className="h-11 text-base md:text-sm"
+                          placeholder="e.g. 1450.00"
+                          className="h-11 text-base md:text-sm font-semibold"
                           {...field}
                         />
                       </FormControl>
@@ -204,50 +298,127 @@ export default function ManagerExpensesPage() {
           </CardContent>
         </Card>
 
-        {/* Expenses List: Card List on mobile instead of wide scrolling table */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base md:text-lg flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-rose-500" />
-              <span>Recent Expenditures</span>
-            </CardTitle>
-            <CardDescription className="text-xs">
-              History of cafe outgoings
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Loading expenses...</p>
-            ) : expenses.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-8 text-center">
-                No expense entries found.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {expenses.map((exp) => (
-                  <div
-                    key={exp.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-border bg-card/60 p-4 shadow-sm"
-                  >
-                    <div>
-                      <p className="text-sm font-bold text-foreground">
-                        {exp.category}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {exp.expense_date} {exp.note ? `• ${exp.note}` : ''}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-base font-black text-rose-500">
-                        ₹{Number(exp.amount).toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+        {/* Expenses List & Total Summary Banner */}
+        <div className="space-y-4 lg:col-span-2">
+          {/* Today's Total Banner */}
+          <Card className="bg-rose-500/10 border-rose-500/30 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-xs uppercase tracking-wider text-rose-400 font-semibold">
+                Today's Total Outgoings
+              </span>
+              <div className="text-2xl md:text-3xl font-black text-rose-500 mt-0.5">
+                {formatCurrency(todayTotal)}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+
+            {/* Today / Last 7 Days Filter Pills */}
+            <div className="flex items-center gap-1.5 self-start sm:self-auto bg-card p-1 rounded-lg border border-border">
+              <Button
+                size="sm"
+                variant={timeFilter === 'today' ? 'default' : 'ghost'}
+                className="h-8 text-xs px-3"
+                onClick={() => setTimeFilter('today')}
+              >
+                Today
+              </Button>
+              <Button
+                size="sm"
+                variant={timeFilter === '7days' ? 'default' : 'ghost'}
+                className="h-8 text-xs px-3"
+                onClick={() => setTimeFilter('7days')}
+              >
+                Last 7 Days
+              </Button>
+            </div>
+          </Card>
+
+          {/* Card List of Expenses */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base md:text-lg flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-rose-500" />
+                  <span>
+                    {timeFilter === 'today' ? "Today's Expenses" : 'Expenses (Last 7 Days)'}
+                  </span>
+                </span>
+                <Badge variant="outline" className="text-xs">
+                  {filteredExpenses.length} entries
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-sm text-muted-foreground">Loading expenses...</p>
+              ) : filteredExpenses.length === 0 ? (
+                <div className="text-center py-10 border border-dashed border-border rounded-xl">
+                  <p className="text-xs text-muted-foreground">
+                    No expense records found for this period.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredExpenses.map((exp) => (
+                    <div
+                      key={exp.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/60 p-3.5 shadow-sm"
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-foreground">
+                          {exp.category}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {exp.expense_date} {exp.note ? `• ${exp.note}` : ''}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-base font-black text-rose-500">
+                          {formatCurrency(exp.amount)}
+                        </span>
+
+                        {/* Owner-only Delete Button with Alert Dialog */}
+                        {isOwner && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                aria-label="Delete expense"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Expense Record</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete this expense of{' '}
+                                  <strong>{formatCurrency(exp.amount)}</strong> ({exp.category})?
+                                  This will permanently adjust the cafe profit figures.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                                  onClick={() => handleDeleteExpense(exp.id)}
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

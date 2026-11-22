@@ -8,21 +8,21 @@ import { MenuItem, MenuCategory } from '@/types/database';
 import { menuItemSchema, MenuItemInput } from '@/schemas/menu-item';
 import {
   createMenuItemAction,
+  updateMenuItemAction,
   toggleMenuItemAvailabilityAction,
 } from '@/app/actions/menu';
+import { formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
 
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import {
   Form,
   FormControl,
@@ -56,24 +56,35 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@/components/ui/drawer';
-import { Plus, Coffee, Loader2 } from 'lucide-react';
+import { Plus, Coffee, Loader2, Edit3 } from 'lucide-react';
 
 export default function ManagerMenuPage() {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const supabase = createClient();
 
-  const form = useForm<MenuItemInput>({
+  const createForm = useForm<MenuItemInput>({
     resolver: zodResolver(menuItemSchema),
     defaultValues: {
       category_id: '',
       name: '',
-      price: 0,
+      price: '' as any,
+      is_available: true,
+    },
+  });
+
+  const editForm = useForm<MenuItemInput>({
+    resolver: zodResolver(menuItemSchema),
+    defaultValues: {
+      category_id: '',
+      name: '',
+      price: '' as any,
       is_available: true,
     },
   });
@@ -98,16 +109,20 @@ export default function ManagerMenuPage() {
     loadMenu();
   }, []);
 
-  const handleToggle = async (item: MenuItem) => {
+  // Optimistic toggle for availability badge
+  const handleOptimisticToggle = async (item: MenuItem) => {
     const nextState = !item.is_available;
+
+    // 1. Optimistic UI update
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, is_available: nextState } : i))
     );
 
+    // 2. Server mutation
     const res = await toggleMenuItemAvailabilityAction(item.id, nextState);
     if (res?.error) {
       toast.error('Failed to update status', { description: res.error });
-      loadMenu();
+      loadMenu(); // Rollback on error
     } else {
       toast.success(
         `${item.name} is now ${nextState ? 'Available' : 'Marked Sold Out'}`
@@ -115,7 +130,7 @@ export default function ManagerMenuPage() {
     }
   };
 
-  const onSubmit = async (values: MenuItemInput) => {
+  const onCreateSubmit = async (values: MenuItemInput) => {
     setIsSubmitting(true);
     try {
       const res = await createMenuItemAction(values);
@@ -126,9 +141,9 @@ export default function ManagerMenuPage() {
       }
 
       toast.success(`Added ${values.name} to menu!`);
-      form.reset();
-      setDialogOpen(false);
-      setDrawerOpen(false);
+      createForm.reset();
+      setCreateDialogOpen(false);
+      setCreateDrawerOpen(false);
       loadMenu();
     } catch {
       toast.error('Unexpected error while adding item.');
@@ -137,16 +152,53 @@ export default function ManagerMenuPage() {
     }
   };
 
-  const MenuItemFormContent = () => (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+  const onEditSubmit = async (values: MenuItemInput) => {
+    if (!editingItem) return;
+    setIsSubmitting(true);
+    try {
+      const res = await updateMenuItemAction(editingItem.id, values);
+      if (res?.error) {
+        toast.error('Failed to update item', { description: res.error });
+        setIsSubmitting(false);
+        return;
+      }
+
+      toast.success(`Updated ${values.name}!`);
+      setEditingItem(null);
+      loadMenu();
+    } catch {
+      toast.error('Unexpected error updating item.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openEditModal = (item: MenuItem) => {
+    setEditingItem(item);
+    editForm.reset({
+      category_id: item.category_id,
+      name: item.name,
+      price: item.price,
+      is_available: item.is_available,
+    });
+  };
+
+  const MenuItemFormContent = ({
+    formInstance,
+    onSubmitHandler,
+  }: {
+    formInstance: typeof createForm;
+    onSubmitHandler: (values: MenuItemInput) => Promise<void>;
+  }) => (
+    <Form {...formInstance}>
+      <form onSubmit={formInstance.handleSubmit(onSubmitHandler)} className="space-y-4">
         <FormField
-          control={form.control}
+          control={formInstance.control}
           name="category_id"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Category</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} value={field.value || ''}>
                 <FormControl>
                   <SelectTrigger className="h-11 text-base md:text-sm">
                     <SelectValue placeholder="Select a category" />
@@ -166,7 +218,7 @@ export default function ManagerMenuPage() {
         />
 
         <FormField
-          control={form.control}
+          control={formInstance.control}
           name="name"
           render={({ field }) => (
             <FormItem>
@@ -184,7 +236,7 @@ export default function ManagerMenuPage() {
         />
 
         <FormField
-          control={form.control}
+          control={formInstance.control}
           name="price"
           render={({ field }) => (
             <FormItem>
@@ -194,7 +246,7 @@ export default function ManagerMenuPage() {
                   type="number"
                   step="1"
                   placeholder="150"
-                  className="h-11 text-base md:text-sm"
+                  className="h-11 text-base md:text-sm font-semibold"
                   {...field}
                 />
               </FormControl>
@@ -229,11 +281,10 @@ export default function ManagerMenuPage() {
           </p>
         </div>
 
-        {/* Responsive Dialog (Desktop) & Drawer (Mobile) */}
+        {/* Add Item Trigger */}
         <div>
-          {/* Desktop Dialog */}
           <div className="hidden sm:block">
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="h-11 gap-2 font-semibold shadow">
                   <Plus className="h-4 w-4" />
@@ -244,17 +295,19 @@ export default function ManagerMenuPage() {
                 <DialogHeader>
                   <DialogTitle>Add Menu Item</DialogTitle>
                   <DialogDescription>
-                    Add a new beverage or food item to the cafe catalog.
+                    Add a new beverage or food item with category and pricing.
                   </DialogDescription>
                 </DialogHeader>
-                <MenuItemFormContent />
+                <MenuItemFormContent
+                  formInstance={createForm}
+                  onSubmitHandler={onCreateSubmit}
+                />
               </DialogContent>
             </Dialog>
           </div>
 
-          {/* Mobile Drawer */}
           <div className="block sm:hidden">
-            <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <Drawer open={createDrawerOpen} onOpenChange={setCreateDrawerOpen}>
               <DrawerTrigger asChild>
                 <Button className="w-full h-11 gap-2 font-semibold shadow">
                   <Plus className="h-4 w-4" />
@@ -269,11 +322,16 @@ export default function ManagerMenuPage() {
                   </DrawerDescription>
                 </DrawerHeader>
                 <div className="px-4 py-2">
-                  <MenuItemFormContent />
+                  <MenuItemFormContent
+                    formInstance={createForm}
+                    onSubmitHandler={onCreateSubmit}
+                  />
                 </div>
                 <DrawerFooter>
                   <DrawerClose asChild>
-                    <Button variant="outline" className="h-11">Cancel</Button>
+                    <Button variant="outline" className="h-11">
+                      Cancel
+                    </Button>
                   </DrawerClose>
                 </DrawerFooter>
               </DrawerContent>
@@ -281,6 +339,24 @@ export default function ManagerMenuPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Item Modal */}
+      {editingItem && (
+        <Dialog open={!!editingItem} onOpenChange={(open) => !open && setEditingItem(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit {editingItem.name}</DialogTitle>
+              <DialogDescription>
+                Modify item name, price, or change category.
+              </DialogDescription>
+            </DialogHeader>
+            <MenuItemFormContent
+              formInstance={editForm}
+              onSubmitHandler={onEditSubmit}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading menu catalog...</p>
@@ -311,17 +387,31 @@ export default function ManagerMenuPage() {
                             {item.name}
                           </p>
                           <p className="text-xs font-bold text-primary mt-0.5">
-                            ₹{item.price}
+                            {formatCurrency(item.price)}
                           </p>
                         </div>
+
                         <div className="flex items-center gap-2">
+                          {/* Optimistic Availability Toggle Badge */}
                           <Badge
                             variant={item.is_available ? 'success' : 'destructive'}
-                            className="cursor-pointer text-[11px]"
-                            onClick={() => handleToggle(item)}
+                            className="cursor-pointer text-[11px] select-none hover:opacity-80 active:scale-95 transition"
+                            onClick={() => handleOptimisticToggle(item)}
+                            title="Click to toggle availability"
                           >
                             {item.is_available ? 'Available' : 'Sold Out'}
                           </Badge>
+
+                          {/* Edit Item Dialog Trigger */}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => openEditModal(item)}
+                            title="Edit menu item"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                     ))}

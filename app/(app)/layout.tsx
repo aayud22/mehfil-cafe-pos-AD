@@ -5,7 +5,6 @@ import {
   Role,
   ROLE_LABELS,
   navForRole,
-  HOME_BY_ROLE,
   NavItem,
 } from '@/lib/auth/roles';
 import { signOutAction } from '@/app/actions/auth';
@@ -45,7 +44,7 @@ export default async function AppLayout({
     redirect('/login');
   }
 
-  // Fetch verified role directly from server profiles table (never trust client)
+  // Fetch verified role directly from server profiles table
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
@@ -97,7 +96,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground md:flex-row">
-      {/* Mobile Top Header: Slim top bar for single-item roles, hamburger for multi-item roles */}
+      {/* Mobile Top Header */}
       {isSingleItemRole ? (
         <header className="sticky top-0 z-40 flex h-14 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
           <div className="flex items-center gap-2">
@@ -189,9 +188,10 @@ export default async function AppLayout({
         </header>
       )}
 
-      {/* Desktop Sidebar: If role has 1 item, hides nav list and keeps brand, user card, sign out */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-border md:bg-card/60 p-4">
-        <div className="flex items-center gap-3 pb-6">
+      {/* Desktop Sidebar: Scrollable nav list & pinned Sign Out button */}
+      <aside className="hidden md:flex md:w-64 md:flex-col md:h-dvh md:sticky md:top-0 md:border-r md:border-border md:bg-card/60 p-4">
+        {/* Brand Header */}
+        <div className="flex items-center gap-3 pb-6 shrink-0">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
             <Coffee className="h-5 w-5" />
           </div>
@@ -203,7 +203,8 @@ export default async function AppLayout({
           </div>
         </div>
 
-        <div className="mb-4 rounded-xl border border-border bg-muted/40 p-3">
+        {/* Profile Card */}
+        <div className="mb-4 rounded-xl border border-border bg-muted/40 p-3 shrink-0">
           <p className="text-xs text-muted-foreground">Logged in as</p>
           <p className="truncate text-xs font-semibold text-foreground">
             {profile?.full_name || user.email}
@@ -213,14 +214,15 @@ export default async function AppLayout({
           </Badge>
         </div>
 
-        {/* If role has > 1 item, render navigation list; otherwise hide it */}
+        {/* Scrollable Navigation List */}
         {!isSingleItemRole && (
-          <nav className="flex-1 space-y-1">
+          <nav className="flex-1 overflow-y-auto pr-1 space-y-1 scrollbar-thin">
             <NavList />
           </nav>
         )}
 
-        <div className="pt-6 border-t border-border mt-auto">
+        {/* Pinned Sign Out Button (Always visible at bottom) */}
+        <div className="pt-4 border-t border-border mt-auto shrink-0">
           <form action={signOutAction}>
             <Button
               type="submit"
@@ -243,7 +245,7 @@ export default async function AppLayout({
         {children}
       </main>
 
-      {/* Mobile Bottom Navigation Bar (Shown only for multi-item roles: Owner/Manager) */}
+      {/* Mobile Bottom Navigation Bar for Owner/Manager */}
       {!isSingleItemRole && (
         <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-16 w-full items-center justify-around border-t border-border bg-card/95 px-2 backdrop-blur md:hidden">
           <Link

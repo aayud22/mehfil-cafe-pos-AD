@@ -1,6 +1,9 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useTodayStats } from '@/hooks/useTodayStats';
+import { createClient } from '@/lib/supabase/client';
+import { formatCurrency } from '@/lib/utils';
 import {
   Card,
   CardContent,
@@ -19,6 +22,8 @@ import {
   Banknote,
   QrCode,
   RefreshCw,
+  Award,
+  Calendar,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -29,14 +34,114 @@ import {
   YAxis,
   Tooltip,
   Cell,
+  LineChart,
+  Line,
+  CartesianGrid,
 } from 'recharts';
+
+interface TopItem {
+  id: string;
+  name: string;
+  quantity: number;
+  revenue: number;
+}
+
+interface DailySales {
+  date: string;
+  label: string;
+  amount: number;
+}
 
 export default function OwnerDashboardPage() {
   const { stats, isLoading, error, refetch } = useTodayStats();
+  const [topItems, setTopItems] = useState<TopItem[]>([]);
+  const [weeklySales, setWeeklySales] = useState<DailySales[]>([]);
+  const [loadingExtras, setLoadingExtras] = useState(true);
+
+  const supabase = createClient();
+
+  const loadExtras = async () => {
+    setLoadingExtras(true);
+    try {
+      // 1. Fetch Top 5 items sold today
+      const { data: orderItems } = await supabase
+        .from('order_items')
+        .select(`
+          quantity,
+          unit_price,
+          menu_item:menu_items(id, name),
+          order:orders!inner(status, created_at)
+        `)
+        .in('order.status', ['served', 'billed']);
+
+      if (orderItems) {
+        const itemMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
+        orderItems.forEach((item: any) => {
+          if (!item.menu_item) return;
+          const id = item.menu_item.id;
+          if (!itemMap[id]) {
+            itemMap[id] = { name: item.menu_item.name, quantity: 0, revenue: 0 };
+          }
+          itemMap[id].quantity += item.quantity;
+          itemMap[id].revenue += Number(item.unit_price) * item.quantity;
+        });
+
+        const sorted = Object.entries(itemMap)
+          .map(([id, val]) => ({ id, ...val }))
+          .sort((a, b) => b.quantity - a.quantity)
+          .slice(0, 5);
+
+        setTopItems(sorted);
+      }
+
+      // 2. Fetch last 7 days sales
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+
+      const { data: payments } = await supabase
+        .from('payments')
+        .select('amount, paid_at')
+        .gte('paid_at', sevenDaysAgo.toISOString())
+        .order('paid_at', { ascending: true });
+
+      // Build 7-day bucket
+      const dayMap: Record<string, number> = {};
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        dayMap[dateStr] = 0;
+      }
+
+      (payments || []).forEach((p) => {
+        const pDate = new Date(p.paid_at).toISOString().split('T')[0];
+        if (dayMap[pDate] !== undefined) {
+          dayMap[pDate] += Number(p.amount);
+        }
+      });
+
+      const weeklyList: DailySales[] = Object.entries(dayMap).map(([dateStr, amount]) => {
+        const d = new Date(dateStr);
+        const label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
+        return { date: dateStr, label, amount };
+      });
+
+      setWeeklySales(weeklyList);
+    } catch {
+      // Ignore background analytics fetch errors
+    } finally {
+      setLoadingExtras(false);
+    }
+  };
+
+  useEffect(() => {
+    loadExtras();
+  }, []);
 
   const handleRefresh = async () => {
     try {
-      await refetch();
+      await Promise.all([refetch(), loadExtras()]);
       toast.success('Financial figures refreshed!');
     } catch {
       toast.error('Failed to refresh data');
@@ -82,6 +187,8 @@ export default function OwnerDashboardPage() {
     { name: 'Card', amount: Number(stats.mode_breakdown?.card || 0), color: '#3b82f6' },
   ];
 
+  const totalWeekly = weeklySales.reduce((sum, d) => sum + d.amount, 0);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -104,7 +211,7 @@ export default function OwnerDashboardPage() {
         </Button>
       </div>
 
-      {/* KPI Stat Cards */}
+      {/* KPI Stat Cards (Formatted with formatCurrency for negatives like -₹2,980) */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Today's Sales */}
         <Card>
@@ -118,7 +225,7 @@ export default function OwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl md:text-3xl font-extrabold text-foreground">
-              ₹{sales.toLocaleString('en-IN')}
+              {formatCurrency(sales)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Gross billed revenue today
@@ -138,7 +245,7 @@ export default function OwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl md:text-3xl font-extrabold text-foreground">
-              ₹{expenses.toLocaleString('en-IN')}
+              {formatCurrency(expenses)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Dairy, beans, inventory & sundries
@@ -146,7 +253,7 @@ export default function OwnerDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Today's Net Profit */}
+        {/* Today's Net Profit (Formatted to handle negative values cleanly) */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -168,7 +275,7 @@ export default function OwnerDashboardPage() {
                 profit >= 0 ? 'text-amber-500' : 'text-red-500'
               }`}
             >
-              ₹{profit.toLocaleString('en-IN')}
+              {formatCurrency(profit)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Sales minus daily logged expenses
@@ -176,11 +283,11 @@ export default function OwnerDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Total Orders */}
+        {/* Renamed: "Orders today" */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Orders Served
+              Orders today
             </span>
             <div className="rounded-lg bg-blue-500/10 p-2 text-blue-500">
               <ShoppingBag className="h-5 w-5" />
@@ -199,7 +306,7 @@ export default function OwnerDashboardPage() {
 
       {/* Chart & Distribution Section */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Responsive Bar Chart */}
+        {/* Tender Channel Bar Chart with value labels and unclipped Y-axis */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base md:text-lg">
@@ -212,21 +319,48 @@ export default function OwnerDashboardPage() {
           <CardContent>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis
+                <BarChart data={chartData} margin={{ top: 25, right: 15, left: 10, bottom: 5 }}>
+                  <XAxis
+                    dataKey="name"
                     stroke="#888888"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => `₹${value}`}
+                  />
+                  <YAxis
+                    width={75}
+                    stroke="#888888"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) =>
+                      Intl.NumberFormat('en-IN', {
+                        notation: 'compact',
+                        style: 'currency',
+                        currency: 'INR',
+                        maximumFractionDigits: 1,
+                      }).format(value)
+                    }
                   />
                   <Tooltip
                     cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem' }}
-                    formatter={(value: number) => [`₹${value.toLocaleString('en-IN')}`, 'Revenue']}
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderColor: '#334155',
+                      borderRadius: '0.5rem',
+                    }}
+                    formatter={(value: number) => [formatCurrency(value), 'Revenue']}
                   />
-                  <Bar dataKey="amount" radius={[8, 8, 0, 0]}>
+                  <Bar
+                    dataKey="amount"
+                    radius={[8, 8, 0, 0]}
+                    label={{
+                      position: 'top',
+                      fill: '#f8fafc',
+                      fontSize: 11,
+                      formatter: (val: any) => (val > 0 ? formatCurrency(Number(val)) : ''),
+                    }}
+                  >
                     {chartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
@@ -237,7 +371,7 @@ export default function OwnerDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Quick Breakdown Cards */}
+        {/* Channel Summary */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base md:text-lg">Tender Summary</CardTitle>
@@ -252,7 +386,7 @@ export default function OwnerDashboardPage() {
                 <div>
                   <p className="text-xs text-muted-foreground font-medium">UPI / QR Code</p>
                   <p className="text-base font-bold text-foreground">
-                    ₹{Number(stats.mode_breakdown?.upi || 0).toLocaleString('en-IN')}
+                    {formatCurrency(Number(stats.mode_breakdown?.upi || 0))}
                   </p>
                 </div>
               </div>
@@ -269,7 +403,7 @@ export default function OwnerDashboardPage() {
                 <div>
                   <p className="text-xs text-muted-foreground font-medium">Cash Register</p>
                   <p className="text-base font-bold text-foreground">
-                    ₹{Number(stats.mode_breakdown?.cash || 0).toLocaleString('en-IN')}
+                    {formatCurrency(Number(stats.mode_breakdown?.cash || 0))}
                   </p>
                 </div>
               </div>
@@ -286,7 +420,7 @@ export default function OwnerDashboardPage() {
                 <div>
                   <p className="text-xs text-muted-foreground font-medium">Card POS Swipes</p>
                   <p className="text-base font-bold text-foreground">
-                    ₹{Number(stats.mode_breakdown?.card || 0).toLocaleString('en-IN')}
+                    {formatCurrency(Number(stats.mode_breakdown?.card || 0))}
                   </p>
                 </div>
               </div>
@@ -294,6 +428,128 @@ export default function OwnerDashboardPage() {
                 Card
               </Badge>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 7-Day Sales Chart & Top 5 Items Today */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* 7-Day Sales Trend with Empty State */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span>Last 7 Days Sales Trend</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Total weekly volume: {formatCurrency(totalWeekly)}
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {totalWeekly === 0 ? (
+              <div className="flex flex-col items-center justify-center h-52 border border-dashed border-border rounded-xl text-center p-4">
+                <Calendar className="h-8 w-8 text-muted-foreground/60 mb-2" />
+                <p className="text-xs font-semibold text-muted-foreground">
+                  No sales recorded in the last 7 days.
+                </p>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                  Transactions will populate the weekly trend line automatically.
+                </p>
+              </div>
+            ) : (
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weeklySales} margin={{ top: 15, right: 15, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
+                    <XAxis dataKey="label" stroke="#888888" fontSize={11} tickLine={false} />
+                    <YAxis
+                      width={70}
+                      stroke="#888888"
+                      fontSize={11}
+                      tickLine={false}
+                      tickFormatter={(value) =>
+                        Intl.NumberFormat('en-IN', {
+                          notation: 'compact',
+                          style: 'currency',
+                          currency: 'INR',
+                          maximumFractionDigits: 1,
+                        }).format(value)
+                      }
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: '#334155',
+                        borderRadius: '0.5rem',
+                      }}
+                      formatter={(val: number) => [formatCurrency(val), 'Sales']}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="amount"
+                      stroke="#f59e0b"
+                      strokeWidth={3}
+                      dot={{ fill: '#f59e0b', r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top 5 Items Today with Empty State */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base md:text-lg flex items-center gap-2">
+              <Award className="h-4 w-4 text-amber-500" />
+              <span>Top 5 Items Today</span>
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Best-selling cafe dishes and drinks
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-52 border border-dashed border-border rounded-xl text-center p-4">
+                <Award className="h-8 w-8 text-muted-foreground/60 mb-2" />
+                <p className="text-xs font-semibold text-muted-foreground">
+                  No items sold yet today.
+                </p>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                  Ordered items will rank here as bills settle.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {topItems.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-card/60"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <p className="text-xs font-bold text-foreground line-clamp-1">
+                          {item.name}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {item.quantity} sold
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-foreground">
+                      {formatCurrency(item.revenue)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
