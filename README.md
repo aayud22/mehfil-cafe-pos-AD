@@ -85,8 +85,8 @@ To test the system from different role perspectives, use any of the pre-configur
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/ayushidiyora/mehfil-cafe.git
-cd mehfil-cafe
+git clone https://github.com/ayushidiyora/mehfil-cafe-pos-AD.git
+cd mehfil-cafe-pos-AD
 ```
 
 ### 2. Install dependencies
