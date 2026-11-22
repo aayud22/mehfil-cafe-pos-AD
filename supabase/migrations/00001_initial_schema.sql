@@ -231,10 +231,14 @@ CREATE POLICY "Orders update policy"
   ON public.orders FOR UPDATE
   TO authenticated
   USING (
-    public.current_user_role() IN ('owner', 'manager')
+    public.current_user_role() IN ('owner', 'manager', 'cashier')
     OR (public.current_user_role() = 'kitchen' AND status IN ('new', 'preparing', 'ready'))
     OR (public.current_user_role() = 'waiter' AND status IN ('new', 'preparing', 'ready', 'served'))
-    OR (public.current_user_role() = 'cashier')
+  )
+  WITH CHECK (
+    public.current_user_role() IN ('owner', 'manager', 'cashier')
+    OR (public.current_user_role() = 'kitchen' AND status IN ('preparing', 'ready', 'served'))
+    OR (public.current_user_role() = 'waiter' AND status IN ('new', 'preparing', 'ready', 'served'))
   );
 
 -- 6. Order Items Policies
