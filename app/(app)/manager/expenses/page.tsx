@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Expense } from '@/types/database';
 import { expenseSchema, ExpenseInput } from '@/schemas/expense';
 import { createExpenseAction, deleteExpenseAction } from '@/app/actions/expenses';
-import { formatCurrency } from '@/lib/utils';
+import { formatMoney, formatDate, todayInIndia } from '@/lib/format';
 import { toast } from 'sonner';
 
 import {
@@ -74,7 +74,7 @@ export default function ManagerExpensesPage() {
   const form = useForm<ExpenseInput>({
     resolver: zodResolver(expenseSchema),
     defaultValues: {
-      expense_date: new Date().toISOString().split('T')[0],
+      expense_date: todayInIndia(),
       category: '',
       amount: '' as any, // Amount starts empty with placeholder
       note: '',
@@ -119,9 +119,9 @@ export default function ManagerExpensesPage() {
         return;
       }
 
-      toast.success(`Logged ${formatCurrency(values.amount)} under ${values.category}`);
+      toast.success(`Logged ${formatMoney(values.amount)} under ${values.category}`);
       form.reset({
-        expense_date: new Date().toISOString().split('T')[0],
+        expense_date: todayInIndia(),
         category: '',
         amount: '' as any,
         note: '',
@@ -150,7 +150,7 @@ export default function ManagerExpensesPage() {
     }
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayInIndia();
 
   // Calculate Today's Total
   const todayTotal = expenses
@@ -160,7 +160,7 @@ export default function ManagerExpensesPage() {
   // Filtered List based on Today / Last 7 days
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+  const sevenDaysAgoStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(sevenDaysAgo);
 
   const filteredExpenses = expenses.filter((e) => {
     if (timeFilter === 'today') {
@@ -245,12 +245,12 @@ export default function ManagerExpensesPage() {
                   name="amount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Amount (₹)</FormLabel>
+                      <FormLabel>Amount</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           step="0.01"
-                          placeholder="e.g. 1450.00"
+                          placeholder="e.g. 1450"
                           className="h-11 text-base md:text-sm font-semibold"
                           {...field}
                         />
@@ -307,7 +307,7 @@ export default function ManagerExpensesPage() {
                 Today's Total Outgoings
               </span>
               <div className="text-2xl md:text-3xl font-black text-rose-500 mt-0.5">
-                {formatCurrency(todayTotal)}
+                {formatMoney(todayTotal)}
               </div>
             </div>
 
@@ -368,13 +368,13 @@ export default function ManagerExpensesPage() {
                           {exp.category}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {exp.expense_date} {exp.note ? `• ${exp.note}` : ''}
+                          {formatDate(exp.expense_date)} {exp.note ? `• ${exp.note}` : ''}
                         </p>
                       </div>
 
                       <div className="flex items-center gap-3">
                         <span className="text-base font-black text-rose-500">
-                          {formatCurrency(exp.amount)}
+                          {formatMoney(exp.amount)}
                         </span>
 
                         {/* Owner-only Delete Button with Alert Dialog */}
@@ -395,7 +395,7 @@ export default function ManagerExpensesPage() {
                                 <AlertDialogTitle>Delete Expense Record</AlertDialogTitle>
                                 <AlertDialogDescription>
                                   Are you sure you want to delete this expense of{' '}
-                                  <strong>{formatCurrency(exp.amount)}</strong> ({exp.category})?
+                                  <strong>{formatMoney(exp.amount)}</strong> ({exp.category})?
                                   This will permanently adjust the cafe profit figures.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>

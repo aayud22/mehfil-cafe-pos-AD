@@ -24,7 +24,14 @@ export function useRealtimeOrders(initialOrders: Order[] = []) {
         .order('created_at', { ascending: true });
 
       if (!error && data) {
-        setOrders(data as Order[]);
+        const cleanedOrders = (data as Order[])
+          .filter((o) => o.status !== 'cancelled')
+          .map((o) => ({
+            ...o,
+            order_items: (o.order_items || []).filter((item) => !item.voided_at),
+          }))
+          .filter((o) => o.order_items.length > 0);
+        setOrders(cleanedOrders);
       }
     }
 

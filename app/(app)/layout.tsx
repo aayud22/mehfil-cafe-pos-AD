@@ -8,15 +8,12 @@ import {
   NavItem,
 } from '@/lib/auth/roles';
 import { signOutAction } from '@/app/actions/auth';
+import { SidebarNav } from '@/components/navigation/SidebarNav';
+import { MobileBottomNav } from '@/components/navigation/MobileBottomNav';
+import { WaiterNotificationListener } from '@/components/notifications/WaiterNotificationListener';
 import {
   Coffee,
   LogOut,
-  LayoutDashboard,
-  UtensilsCrossed,
-  Grid,
-  Receipt,
-  ChefHat,
-  Wallet,
   Menu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -59,46 +56,11 @@ export default async function AppLayout({
   const roleNavItems = navForRole(role);
   const isSingleItemRole = roleNavItems.length <= 1;
 
-  const renderIcon = (iconName: NavItem['iconName']) => {
-    switch (iconName) {
-      case 'dashboard':
-        return <LayoutDashboard className="h-5 w-5 text-amber-500 shrink-0" />;
-      case 'menu':
-        return <UtensilsCrossed className="h-5 w-5 text-blue-500 shrink-0" />;
-      case 'tables':
-        return <Grid className="h-5 w-5 text-emerald-500 shrink-0" />;
-      case 'expenses':
-        return <Wallet className="h-5 w-5 text-rose-500 shrink-0" />;
-      case 'waiter':
-        return <Grid className="h-5 w-5 text-purple-500 shrink-0" />;
-      case 'kitchen':
-        return <ChefHat className="h-5 w-5 text-amber-500 shrink-0" />;
-      case 'cashier':
-        return <Receipt className="h-5 w-5 text-emerald-500 shrink-0" />;
-    }
-  };
-
-  const NavList = () => (
-    <div className="space-y-1">
-      {roleNavItems.map((item) => (
-        <Link key={item.href} href={item.href} className="block">
-          <Button
-            variant="ghost"
-            className="w-full h-11 justify-start gap-3 text-sm font-medium"
-          >
-            {renderIcon(item.iconName)}
-            <span>{item.label}</span>
-          </Button>
-        </Link>
-      ))}
-    </div>
-  );
-
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground md:flex-row">
       {/* Mobile Top Header */}
       {isSingleItemRole ? (
-        <header className="sticky top-0 z-40 flex h-14 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-40 flex h-14 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden print:hidden">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow">
               <Coffee className="h-4 w-4" />
@@ -124,7 +86,7 @@ export default async function AppLayout({
           </form>
         </header>
       ) : (
-        <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden print:hidden">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow">
               <Coffee className="h-5 w-5" />
@@ -168,7 +130,7 @@ export default async function AppLayout({
                   </div>
                 </SheetHeader>
                 <Separator className="my-3" />
-                <NavList />
+                <SidebarNav items={roleNavItems} />
               </div>
 
               <div className="pt-6 border-t border-border">
@@ -189,7 +151,7 @@ export default async function AppLayout({
       )}
 
       {/* Desktop Sidebar: Scrollable nav list & pinned Sign Out button */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:h-dvh md:sticky md:top-0 md:border-r md:border-border md:bg-card/60 p-4">
+      <aside className="hidden md:flex md:w-64 md:flex-col md:h-dvh md:sticky md:top-0 md:border-r md:border-border md:bg-card/60 p-4 print:hidden">
         {/* Brand Header */}
         <div className="flex items-center gap-3 pb-6 shrink-0">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
@@ -217,7 +179,7 @@ export default async function AppLayout({
         {/* Scrollable Navigation List */}
         {!isSingleItemRole && (
           <nav className="flex-1 overflow-y-auto pr-1 space-y-1 scrollbar-thin">
-            <NavList />
+            <SidebarNav items={roleNavItems} />
           </nav>
         )}
 
@@ -238,7 +200,7 @@ export default async function AppLayout({
 
       {/* Main Content View */}
       <main
-        className={`flex-1 overflow-y-auto p-4 md:p-8 w-full max-w-full ${
+        className={`flex-1 overflow-y-auto p-4 md:p-8 w-full max-w-full print:p-0 print:m-0 print:overflow-visible ${
           !isSingleItemRole ? 'pb-20 md:pb-8' : 'pb-8'
         }`}
       >
@@ -246,38 +208,10 @@ export default async function AppLayout({
       </main>
 
       {/* Mobile Bottom Navigation Bar for Owner/Manager */}
-      {!isSingleItemRole && (
-        <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-16 w-full items-center justify-around border-t border-border bg-card/95 px-2 backdrop-blur md:hidden">
-          <Link
-            href="/owner"
-            className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground"
-          >
-            <LayoutDashboard className="h-5 w-5" />
-            <span className="text-[10px] font-medium mt-0.5">Owner</span>
-          </Link>
-          <Link
-            href="/waiter"
-            className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground"
-          >
-            <Grid className="h-5 w-5" />
-            <span className="text-[10px] font-medium mt-0.5">Floor</span>
-          </Link>
-          <Link
-            href="/kitchen"
-            className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground"
-          >
-            <ChefHat className="h-5 w-5" />
-            <span className="text-[10px] font-medium mt-0.5">Kitchen</span>
-          </Link>
-          <Link
-            href="/cashier"
-            className="flex flex-col items-center justify-center py-1 text-muted-foreground hover:text-foreground"
-          >
-            <Receipt className="h-5 w-5" />
-            <span className="text-[10px] font-medium mt-0.5">Billing</span>
-          </Link>
-        </nav>
-      )}
+      {!isSingleItemRole && <MobileBottomNav role={role} />}
+
+      {/* Realtime Order-Ready Chime & Toast Notification for Waiters */}
+      <WaiterNotificationListener role={role} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRealtimeOrders } from '@/hooks/useRealtimeOrders';
 import { updateOrderStatusAction } from '@/app/actions/orders';
+import { formatTime } from '@/lib/format';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -177,12 +178,7 @@ export default function KitchenPage() {
 
                   <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Clock className="h-3.5 w-3.5" />
-                    <span>
-                      {new Date(order.created_at).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
+                    <span>{formatTime(order.created_at)}</span>
                   </div>
 
                   {order.note && (
@@ -191,13 +187,15 @@ export default function KitchenPage() {
                     </div>
                   )}
 
-                  {/* Items list */}
+                  {/* Items list (excluding voided items) */}
                   <div className="mt-4 space-y-2">
-                    {order.order_items?.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-start justify-between text-sm py-1 border-b border-border/40 last:border-none"
-                      >
+                    {order.order_items
+                      ?.filter((item) => !item.voided_at)
+                      .map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-start justify-between text-sm py-1 border-b border-border/40 last:border-none"
+                        >
                         <div className="flex items-center gap-2">
                           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-xs font-bold text-primary">
                             {item.quantity}x

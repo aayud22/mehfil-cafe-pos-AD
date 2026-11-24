@@ -71,5 +71,6 @@ export async function updateOrderStatusAction(
 
   revalidatePath("/kitchen")
   revalidatePath("/cashier")
+  revalidatePath("/waiter")
   return { success: true }
 }

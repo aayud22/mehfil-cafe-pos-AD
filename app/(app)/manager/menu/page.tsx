@@ -11,7 +11,7 @@ import {
   updateMenuItemAction,
   toggleMenuItemAvailabilityAction,
 } from '@/app/actions/menu';
-import { formatCurrency } from '@/lib/utils';
+import { formatMoney } from '@/lib/format';
 import { toast } from 'sonner';
 
 import {
@@ -240,7 +240,7 @@ export default function ManagerMenuPage() {
           name="price"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Price (₹)</FormLabel>
+              <FormLabel>Price</FormLabel>
               <FormControl>
                 <Input
                   type="number"
@@ -387,7 +387,7 @@ export default function ManagerMenuPage() {
                             {item.name}
                           </p>
                           <p className="text-xs font-bold text-primary mt-0.5">
-                            {formatCurrency(item.price)}
+                            {formatMoney(item.price)}
                           </p>
                         </div>
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTodayStats } from '@/hooks/useTodayStats';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency } from '@/lib/utils';
+import { formatMoney } from '@/lib/format';
 import {
   Card,
   CardContent,
@@ -63,21 +63,24 @@ export default function OwnerDashboardPage() {
   const loadExtras = async () => {
     setLoadingExtras(true);
     try {
-      // 1. Fetch Top 5 items sold today
+      // 1. Fetch Top 5 items sold today (strictly excluding voided items and cancelled orders)
       const { data: orderItems } = await supabase
         .from('order_items')
         .select(`
           quantity,
           unit_price,
+          voided_at,
           menu_item:menu_items(id, name),
           order:orders!inner(status, created_at)
         `)
+        .is('voided_at', null)
+        .neq('order.status', 'cancelled')
         .in('order.status', ['served', 'billed']);
 
       if (orderItems) {
         const itemMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
         orderItems.forEach((item: any) => {
-          if (!item.menu_item) return;
+          if (!item.menu_item || item.voided_at) return;
           const id = item.menu_item.id;
           if (!itemMap[id]) {
             itemMap[id] = { name: item.menu_item.name, quantity: 0, revenue: 0 };
@@ -105,17 +108,17 @@ export default function OwnerDashboardPage() {
         .gte('paid_at', sevenDaysAgo.toISOString())
         .order('paid_at', { ascending: true });
 
-      // Build 7-day bucket
+      // Build 7-day bucket in Asia/Kolkata timezone
       const dayMap: Record<string, number> = {};
       for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
         dayMap[dateStr] = 0;
       }
 
       (payments || []).forEach((p) => {
-        const pDate = new Date(p.paid_at).toISOString().split('T')[0];
+        const pDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(p.paid_at));
         if (dayMap[pDate] !== undefined) {
           dayMap[pDate] += Number(p.amount);
         }
@@ -123,7 +126,7 @@ export default function OwnerDashboardPage() {
 
       const weeklyList: DailySales[] = Object.entries(dayMap).map(([dateStr, amount]) => {
         const d = new Date(dateStr);
-        const label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
+        const label = new Intl.DateTimeFormat('en-IN', { weekday: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' }).format(d);
         return { date: dateStr, label, amount };
       });
 
@@ -211,7 +214,7 @@ export default function OwnerDashboardPage() {
         </Button>
       </div>
 
-      {/* KPI Stat Cards (Formatted with formatCurrency for negatives like -₹2,980) */}
+      {/* KPI Stat Cards (Formatted with formatMoney for negatives like -₹2,980) */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Today's Sales */}
         <Card>
@@ -225,7 +228,7 @@ export default function OwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl md:text-3xl font-extrabold text-foreground">
-              {formatCurrency(sales)}
+              {formatMoney(sales)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Gross billed revenue today
@@ -245,7 +248,7 @@ export default function OwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl md:text-3xl font-extrabold text-foreground">
-              {formatCurrency(expenses)}
+              {formatMoney(expenses)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Dairy, beans, inventory & sundries
@@ -275,7 +278,7 @@ export default function OwnerDashboardPage() {
                 profit >= 0 ? 'text-amber-500' : 'text-red-500'
               }`}
             >
-              {formatCurrency(profit)}
+              {formatMoney(profit)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Sales minus daily logged expenses
@@ -333,23 +336,25 @@ export default function OwnerDashboardPage() {
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) =>
-                      Intl.NumberFormat('en-IN', {
-                        notation: 'compact',
-                        style: 'currency',
-                        currency: 'INR',
-                        maximumFractionDigits: 1,
-                      }).format(value)
-                    }
+                    domain={[0, (dataMax: number) => (dataMax > 0 ? 'auto' : 500)]}
+                    tickFormatter={(value) => formatMoney(value)}
                   />
                   <Tooltip
                     cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: '#334155',
-                      borderRadius: '0.5rem',
+                    content={({ active, payload, label }: any) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="rounded-lg border border-slate-700 bg-slate-900/95 p-2.5 shadow-xl backdrop-blur-sm">
+                            <p className="text-xs font-semibold text-slate-200">{label}</p>
+                            <p className="text-xs font-bold text-foreground mt-1">
+                              <span className="text-muted-foreground font-normal">Revenue: </span>
+                              {formatMoney(Number(payload[0].value || 0))}
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
                     }}
-                    formatter={(value: number) => [formatCurrency(value), 'Revenue']}
                   />
                   <Bar
                     dataKey="amount"
@@ -358,7 +363,7 @@ export default function OwnerDashboardPage() {
                       position: 'top',
                       fill: '#f8fafc',
                       fontSize: 11,
-                      formatter: (val: any) => (val > 0 ? formatCurrency(Number(val)) : ''),
+                      formatter: (val: any) => (val > 0 ? formatMoney(Number(val)) : ''),
                     }}
                   >
                     {chartData.map((entry, index) => (
@@ -386,7 +391,7 @@ export default function OwnerDashboardPage() {
                 <div>
                   <p className="text-xs text-muted-foreground font-medium">UPI / QR Code</p>
                   <p className="text-base font-bold text-foreground">
-                    {formatCurrency(Number(stats.mode_breakdown?.upi || 0))}
+                    {formatMoney(Number(stats.mode_breakdown?.upi || 0))}
                   </p>
                 </div>
               </div>
@@ -403,7 +408,7 @@ export default function OwnerDashboardPage() {
                 <div>
                   <p className="text-xs text-muted-foreground font-medium">Cash Register</p>
                   <p className="text-base font-bold text-foreground">
-                    {formatCurrency(Number(stats.mode_breakdown?.cash || 0))}
+                    {formatMoney(Number(stats.mode_breakdown?.cash || 0))}
                   </p>
                 </div>
               </div>
@@ -420,7 +425,7 @@ export default function OwnerDashboardPage() {
                 <div>
                   <p className="text-xs text-muted-foreground font-medium">Card POS Swipes</p>
                   <p className="text-base font-bold text-foreground">
-                    {formatCurrency(Number(stats.mode_breakdown?.card || 0))}
+                    {formatMoney(Number(stats.mode_breakdown?.card || 0))}
                   </p>
                 </div>
               </div>
@@ -443,7 +448,7 @@ export default function OwnerDashboardPage() {
                 <span>Last 7 Days Sales Trend</span>
               </CardTitle>
               <CardDescription className="text-xs">
-                Total weekly volume: {formatCurrency(totalWeekly)}
+                Total weekly volume: {formatMoney(totalWeekly)}
               </CardDescription>
             </div>
           </CardHeader>
@@ -465,26 +470,29 @@ export default function OwnerDashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
                     <XAxis dataKey="label" stroke="#888888" fontSize={11} tickLine={false} />
                     <YAxis
-                      width={70}
+                      width={75}
                       stroke="#888888"
                       fontSize={11}
                       tickLine={false}
-                      tickFormatter={(value) =>
-                        Intl.NumberFormat('en-IN', {
-                          notation: 'compact',
-                          style: 'currency',
-                          currency: 'INR',
-                          maximumFractionDigits: 1,
-                        }).format(value)
-                      }
+                      axisLine={false}
+                      domain={[0, (dataMax: number) => (dataMax > 0 ? 'auto' : 1000)]}
+                      tickFormatter={(value) => formatMoney(value)}
                     />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#0f172a',
-                        borderColor: '#334155',
-                        borderRadius: '0.5rem',
+                      content={({ active, payload, label }: any) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="rounded-lg border border-slate-700 bg-slate-900/95 p-2.5 shadow-xl backdrop-blur-sm">
+                              <p className="text-xs font-semibold text-slate-200">{label}</p>
+                              <p className="text-xs font-bold text-amber-400 mt-1">
+                                <span className="text-muted-foreground font-normal">Sales: </span>
+                                {formatMoney(Number(payload[0].value || 0))}
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
                       }}
-                      formatter={(val: number) => [formatCurrency(val), 'Sales']}
                     />
                     <Line
                       type="monotone"
@@ -544,7 +552,7 @@ export default function OwnerDashboardPage() {
                       </div>
                     </div>
                     <span className="text-xs font-bold text-foreground">
-                      {formatCurrency(item.revenue)}
+                      {formatMoney(item.revenue)}
                     </span>
                   </div>
                 ))}

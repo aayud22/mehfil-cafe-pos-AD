@@ -61,3 +61,23 @@ INSERT INTO public.expenses (expense_date, category, amount, note) VALUES
   (CURRENT_DATE, 'Coffee Beans', 2800.00, 'Arabica Medium Dark Roast 2kg'),
   (CURRENT_DATE, 'Bakery Supply', 950.00, 'Sourdough and burger buns'),
   (CURRENT_DATE, 'Cleaning Supplies', 320.00, 'Dishwash & surface sanitizer');
+
+-- 5. Version 2: Sample Vendors
+INSERT INTO public.vendors (id, name, contact_person, phone, category) VALUES
+  ('ea111111-1111-1111-1111-111111111111', 'Amul Fresh Dairy Distribution', 'Ramesh Patel', '+91 98251 01234', 'Dairy & Milk Supplier'),
+  ('ea111111-1111-1111-1111-111111111112', 'Blue Tokai Coffee Roasters', 'Kavita Sen', '+91 99880 11223', 'Coffee Bean Roaster'),
+  ('ea111111-1111-1111-1111-111111111113', 'The French Bakery Co.', 'Pierre Roy', '+91 91234 56780', 'Bakery Supplier')
+ON CONFLICT (id) DO NOTHING;
+
+-- 6. Version 2: Sample Inventory Items
+INSERT INTO public.inventory_items (name, category, current_stock, unit, min_threshold, cost_per_unit, vendor_id) VALUES
+  ('Arabica Medium Roast Beans', 'Coffee Beans', 8.5, 'kg', 4.0, 1400.00, 'ea111111-1111-1111-1111-111111111112'),
+  ('Full Cream Cow Milk', 'Dairy & Milk', 25.0, 'L', 10.0, 68.00, 'ea111111-1111-1111-1111-111111111111'),
+  ('Sourdough & Burger Buns', 'Bakery & Breads', 40.0, 'packs', 15.0, 45.00, 'ea111111-1111-1111-1111-111111111113'),
+  ('Vanilla Gourmet Syrup', 'Syrups & Flavors', 4.0, 'bottles', 2.0, 650.00, NULL),
+  ('Takeaway Hot Cups & Lids', 'Packaging & Disposables', 150.0, 'pcs', 50.0, 6.00, NULL);
+
+-- 7. Version 2: Sample Invoices and Dues
+INSERT INTO public.vendor_invoices (vendor_id, invoice_number, invoice_date, total_amount, paid_amount, status, notes) VALUES
+  ('ea111111-1111-1111-1111-111111111111', 'INV-9021', CURRENT_DATE, 4500.00, 2500.00, 'partial', 'Daily dairy delivery batch'),
+  ('ea111111-1111-1111-1111-111111111112', 'INV-4412', CURRENT_DATE, 8400.00, 8400.00, 'paid', '6kg Arabica beans consignment');

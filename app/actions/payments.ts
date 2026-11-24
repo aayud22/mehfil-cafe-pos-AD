@@ -2,10 +2,11 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { paymentSchema, PaymentInput, payTableSchema, PayTableInput } from "@/schemas/payment"
+import { formatMoney } from "@/lib/format"
 import { revalidatePath } from "next/cache"
 
 type PayTableResult =
-  | { ok: true; total: number }
+  | { ok: true; receiptId: string; total?: number }
   | { ok: false; error: string }
 
 export async function payTable(input: PayTableInput): Promise<PayTableResult> {
@@ -20,7 +21,7 @@ export async function payTable(input: PayTableInput): Promise<PayTableResult> {
 
   const supabase = await createClient()
 
-  // Call pay_table RPC function
+  // Call pay_table RPC function (returns receipt_id uuid)
   const { data, error } = await supabase.rpc("pay_table", {
     p_table_id: parsed.data.table_id,
     p_mode: parsed.data.mode,
@@ -34,7 +35,10 @@ export async function payTable(input: PayTableInput): Promise<PayTableResult> {
   revalidatePath("/owner")
   revalidatePath("/waiter")
 
-  return { ok: true, total: Number(data) }
+  const receiptId = String(data)
+  const total = typeof data === "number" ? data : undefined
+
+  return { ok: true, receiptId, total }
 }
 
 export async function processPaymentAction(input: PaymentInput) {
@@ -84,7 +88,7 @@ export async function processPaymentAction(input: PaymentInput) {
   // 3. Reject mismatch between client amount and recomputed server total
   if (Math.abs(computedTotal - parsed.data.amount) > 0.01) {
     return {
-      error: `Payment amount mismatch: Expected ₹${computedTotal.toFixed(2)}, received ₹${parsed.data.amount.toFixed(2)}. Transaction rejected.`,
+      error: `Payment amount mismatch: Expected ${formatMoney(computedTotal)}, received ${formatMoney(parsed.data.amount)}. Transaction rejected.`,
     }
   }
 

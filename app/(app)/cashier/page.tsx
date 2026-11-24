@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { CafeTable, Order } from '@/types/database';
+import { formatMoney } from '@/lib/format';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,13 +50,19 @@ export default function CashierPage() {
         });
 
         const billingList: TableBillingData[] = Object.values(groups).map((group) => {
-          const grandTotal = group.orders.reduce((sum, order) => {
-            const orderSum = (order.order_items || []).reduce(
-              (s, item) => s + Number(item.unit_price) * item.quantity,
-              0
-            );
+          const subtotal = group.orders.reduce((sum, order) => {
+            const orderSum = (order.order_items || [])
+              .filter((item) => !item.voided_at)
+              .reduce(
+                (s, item) => s + Number(item.unit_price) * item.quantity,
+                0
+              );
             return sum + orderSum;
           }, 0);
+
+          const cgst = Math.round(subtotal * 0.025);
+          const sgst = Math.round(subtotal * 0.025);
+          const grandTotal = subtotal + cgst + sgst;
 
           const hasActiveKitchenOrders = group.orders.some(
             (o) => o.status === 'new' || o.status === 'preparing' || o.status === 'ready'
@@ -79,10 +86,16 @@ export default function CashierPage() {
 
     loadOccupiedTables();
 
-    // Subscribe to realtime changes on orders & payments
+    // Subscribe to realtime changes on orders, order_items, tables & payments
     const channel = supabase
       .channel('cashier-tables-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        loadOccupiedTables();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
+        loadOccupiedTables();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cafe_tables' }, () => {
         loadOccupiedTables();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {
@@ -154,7 +167,8 @@ export default function CashierPage() {
                 {/* Summary of rounds */}
                 <div className="mt-3 space-y-2 text-xs">
                   {orders.map((ord, idx) => {
-                    const roundSum = (ord.order_items || []).reduce(
+                    const activeItems = (ord.order_items || []).filter((i) => !i.voided_at);
+                    const roundSum = activeItems.reduce(
                       (s, i) => s + Number(i.unit_price) * i.quantity,
                       0
                     );
@@ -168,12 +182,12 @@ export default function CashierPage() {
                             Round {idx + 1}:
                           </span>
                           <span>
-                            {(ord.order_items || []).length} items
+                            {activeItems.length} items
                           </span>
                           <span className="capitalize">({ord.status})</span>
                         </div>
                         <span className="font-semibold text-foreground">
-                          ₹{roundSum}
+                          {formatMoney(roundSum)}
                         </span>
                       </div>
                     );
@@ -183,11 +197,16 @@ export default function CashierPage() {
 
               <div className="mt-6 border-t border-border pt-4">
                 <div className="mb-4 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Grand Total:
-                  </span>
+                  <div>
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                      Total Payable:
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/80">
+                      Incl. 5% GST (CGST + SGST)
+                    </span>
+                  </div>
                   <span className="text-2xl md:text-3xl font-black text-emerald-500">
-                    ₹{grandTotal.toLocaleString('en-IN')}
+                    {formatMoney(grandTotal)}
                   </span>
                 </div>
 

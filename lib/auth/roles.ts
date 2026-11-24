@@ -5,7 +5,7 @@ export type UserRole = Role; // Alias for backward compatibility
 export interface NavItem {
   href: string;
   label: string;
-  iconName: 'dashboard' | 'menu' | 'tables' | 'expenses' | 'waiter' | 'kitchen' | 'cashier';
+  iconName: 'dashboard' | 'menu' | 'tables' | 'expenses' | 'stock' | 'vendors' | 'waiter' | 'kitchen' | 'cashier' | 'history';
   roles: Role[];
 }
 
@@ -53,6 +53,18 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ['owner', 'manager'],
   },
   {
+    href: '/manager/stock',
+    label: 'Stock & Inventory',
+    iconName: 'stock',
+    roles: ['owner', 'manager'],
+  },
+  {
+    href: '/manager/vendors',
+    label: 'Vendor Dues',
+    iconName: 'vendors',
+    roles: ['owner', 'manager'],
+  },
+  {
     href: '/waiter',
     label: 'Floor POS',
     iconName: 'waiter',
@@ -69,6 +81,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Cashier Billing',
     iconName: 'cashier',
     roles: ['cashier', 'owner', 'manager'],
+  },
+  {
+    href: '/history',
+    label: 'Bill History',
+    iconName: 'history',
+    roles: ['owner', 'manager', 'cashier'],
   },
 ];
 
@@ -92,6 +110,10 @@ export function canAccessRoute(role: Role, pathname: string): boolean {
   }
 
   if (pathname.startsWith('/cashier')) {
+    return role === 'cashier';
+  }
+
+  if (pathname.startsWith('/history')) {
     return role === 'cashier';
   }
 
