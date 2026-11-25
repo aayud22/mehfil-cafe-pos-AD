@@ -6,10 +6,11 @@ import { createClient } from '@/lib/supabase/client';
 import { CafeTable, Order } from '@/types/database';
 import { formatMoney } from '@/lib/format';
 import { useLanguage } from '@/components/providers/LanguageProvider';
+import { getOrderDisplayLabel } from '@/lib/order-label';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Receipt, CheckCircle, Clock, ArrowRight, ChefHat, Layers } from 'lucide-react';
+import { Receipt, CheckCircle, Clock, ArrowRight, ChefHat, Layers, ShoppingBag, Truck } from 'lucide-react';
 
 interface TableBillingData {
   table: CafeTable;
@@ -20,6 +21,7 @@ interface TableBillingData {
 
 export default function CashierPage() {
   const [tableData, setTableData] = useState<TableBillingData[]>([]);
+  const [offPremiseOrders, setOffPremiseOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
   const { t } = useLanguage();
@@ -40,16 +42,22 @@ export default function CashierPage() {
         .order('created_at', { ascending: true });
 
       if (!error && orders) {
-        // Group orders by table_id
+        // Group dine-in orders by table_id, keep takeaway/delivery separate
         const groups: Record<string, { table: CafeTable; orders: Order[] }> = {};
+        const offPremise: Order[] = [];
 
         orders.forEach((o) => {
-          if (!o.table) return;
+          if (o.order_type === 'takeaway' || o.order_type === 'delivery') {
+            offPremise.push(o as Order);
+            return;
+          }
+          if (!o.table || !o.table_id) return;
           if (!groups[o.table_id]) {
             groups[o.table_id] = { table: o.table as CafeTable, orders: [] };
           }
           groups[o.table_id].orders.push(o as Order);
         });
+        setOffPremiseOrders(offPremise);
 
         const billingList: TableBillingData[] = Object.values(groups).map((group) => {
           const subtotal = group.orders.reduce((sum, order) => {
@@ -123,7 +131,7 @@ export default function CashierPage() {
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading occupied dining tables...</p>
-      ) : tableData.length === 0 ? (
+      ) : tableData.length === 0 && offPremiseOrders.length === 0 ? (
         <Card className="flex flex-col items-center justify-center border-dashed py-16 text-center">
           <CheckCircle className="h-12 w-12 text-emerald-500" />
           <h3 className="mt-4 text-base font-semibold text-foreground">
@@ -134,7 +142,9 @@ export default function CashierPage() {
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-8">
+          {tableData.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tableData.map(({ table, orders, grandTotal, hasActiveKitchenOrders }) => (
             <Card
               key={table.id}
@@ -224,6 +234,72 @@ export default function CashierPage() {
               </div>
             </Card>
           ))}
+            </div>
+          )}
+
+          {/* Takeaway & Delivery Orders Section */}
+          {offPremiseOrders.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-extrabold text-foreground flex items-center gap-2">
+                <ShoppingBag className="h-5 w-5 text-primary" />
+                <span>Takeaway &amp; Delivery ({offPremiseOrders.length})</span>
+              </h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {offPremiseOrders.map((ord) => {
+                  const activeItems = (ord.order_items || []).filter((i) => !i.voided_at);
+                  const sub = activeItems.reduce((s, i) => s + Number(i.unit_price) * i.quantity, 0);
+                  const total = sub + Math.round(sub * 0.025) * 2;
+                  const isCooking = ord.status !== 'served';
+
+                  return (
+                    <Card key={ord.id} className="flex flex-col justify-between p-5 shadow-lg border-border">
+                      <div>
+                        <div className="flex items-center justify-between border-b border-border pb-3">
+                          <div className="flex items-center gap-2">
+                            {ord.order_type === 'delivery' ? (
+                              <Truck className="h-4 w-4 text-sky-400" />
+                            ) : (
+                              <ShoppingBag className="h-4 w-4 text-purple-400" />
+                            )}
+                            <span className="text-lg font-black text-primary">
+                              {getOrderDisplayLabel(ord)}
+                            </span>
+                          </div>
+                          <Badge variant={isCooking ? 'warning' : 'success'} className="text-[11px] font-semibold">
+                            {isCooking ? ord.status : 'Ready to Bill'}
+                          </Badge>
+                        </div>
+                        {ord.customer_name && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Customer: <strong className="text-foreground">{ord.customer_name}</strong>
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {activeItems.length} items
+                        </p>
+                      </div>
+
+                      <div className="mt-5 border-t border-border pt-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-muted-foreground uppercase">Est. Total:</span>
+                          <span className="text-xl font-black text-emerald-500">{formatMoney(total)}</span>
+                        </div>
+                        <Link href={`/cashier/order/${ord.id}`} className="block">
+                          <Button className="w-full h-11 text-sm font-semibold justify-between">
+                            <span className="flex items-center gap-2">
+                              <Receipt className="h-4 w-4" />
+                              Proceed to Bill
+                            </span>
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -34,12 +34,16 @@ export interface CafeTable {
 }
 
 export type OrderStatus = 'new' | 'preparing' | 'ready' | 'served' | 'billed' | 'cancelled';
+export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
 
 export interface Order {
   id: string;
-  table_id: string;
+  table_id: string | null;
   waiter_id: string | null;
   status: OrderStatus;
+  order_type?: OrderType;
+  token_number?: number | null;
+  customer_name?: string | null;
   note: string | null;
   cancelled_at?: string | null;
   cancelled_by?: string | null;
@@ -95,6 +99,11 @@ export interface DashboardStats {
   today_expenses: number;
   today_profit: number;
   orders_count: number;
+  orders_by_type?: {
+    dine_in: number;
+    takeaway: number;
+    delivery: number;
+  };
   mode_breakdown: {
     cash: number;
     upi: number;
@@ -105,6 +114,7 @@ export interface DashboardStats {
 export interface BillRow {
   receipt_id: string;
   table_label: string;
+  order_type?: OrderType;
   paid_at: string;
   mode: string;
   total: number;

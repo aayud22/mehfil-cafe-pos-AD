@@ -8,6 +8,7 @@ export interface BillsQueryParams {
   from?: string;
   to?: string;
   mode?: 'cash' | 'upi' | 'card' | null;
+  order_type?: 'dine_in' | 'takeaway' | 'delivery' | null;
   page?: number;
   limit?: number;
 }
@@ -19,9 +20,10 @@ export function useBillsQuery(params: BillsQueryParams, enabled = true) {
   const from = params.from;
   const to = params.to;
   const mode = params.mode || null;
+  const orderType = params.order_type || null;
 
   return useQuery({
-    queryKey: ['bills', { from, to, mode, page, limit }],
+    queryKey: ['bills', { from, to, mode, orderType, page, limit }],
     queryFn: async () => {
       const offset = (page - 1) * limit;
       const { data, error } = await supabase.rpc('get_bills', {
@@ -30,6 +32,7 @@ export function useBillsQuery(params: BillsQueryParams, enabled = true) {
         p_mode: mode,
         p_limit: limit,
         p_offset: offset,
+        p_order_type: orderType,
       });
 
       if (error) {

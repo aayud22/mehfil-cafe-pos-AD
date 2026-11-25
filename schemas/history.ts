@@ -11,6 +11,7 @@ export const historyFilterSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid to date format')
     .optional(),
   mode: z.enum(['cash', 'upi', 'card']).optional(),
+  order_type: z.enum(['dine_in', 'takeaway', 'delivery']).optional(),
   tab: z.enum(['bills', 'cancelled']).default('bills'),
   page: z.coerce.number().int().positive().default(1),
 });
@@ -21,6 +22,7 @@ export interface HistoryFilters {
   from: string;
   to: string;
   mode?: 'cash' | 'upi' | 'card';
+  order_type?: 'dine_in' | 'takeaway' | 'delivery';
   tab: 'bills' | 'cancelled';
   page: number;
 }

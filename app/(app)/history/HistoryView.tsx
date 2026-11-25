@@ -84,6 +84,7 @@ export function HistoryView({ initialRole, initialFilters }: HistoryViewProps) {
       from: filters.from,
       to: filters.to,
       mode: filters.mode,
+      order_type: filters.order_type,
       page: filters.page,
       limit: 20,
     },
@@ -288,7 +289,8 @@ export function HistoryView({ initialRole, initialFilters }: HistoryViewProps) {
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
                     <TableHead className="text-xs font-bold uppercase tracking-wider">Time</TableHead>
-                    <TableHead className="text-xs font-bold uppercase tracking-wider">Table</TableHead>
+                    <TableHead className="text-xs font-bold uppercase tracking-wider">Order</TableHead>
+                    <TableHead className="text-xs font-bold uppercase tracking-wider">Type</TableHead>
                     <TableHead className="text-xs font-bold uppercase tracking-wider">Payment</TableHead>
                     <TableHead className="text-xs font-bold uppercase tracking-wider">Rounds</TableHead>
                     <TableHead className="text-xs font-bold uppercase tracking-wider">Cashier</TableHead>
@@ -310,7 +312,18 @@ export function HistoryView({ initialRole, initialFilters }: HistoryViewProps) {
                       </TableCell>
                       <TableCell className="font-bold text-foreground py-3">
                         <Link href={`/cashier/receipt/${row.receipt_id}`} className="block">
-                          Table {row.table_label}
+                          {row.table_label}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="py-3">
+                        <Link href={`/cashier/receipt/${row.receipt_id}`} className="block">
+                          <Badge variant="outline" className="text-[10px] uppercase font-semibold">
+                            {row.order_type === 'takeaway'
+                              ? 'Takeaway'
+                              : row.order_type === 'delivery'
+                              ? 'Delivery'
+                              : 'Dine-in'}
+                          </Badge>
                         </Link>
                       </TableCell>
                       <TableCell className="py-3">
@@ -367,7 +380,7 @@ export function HistoryView({ initialRole, initialFilters }: HistoryViewProps) {
                     <div className="flex items-center justify-between border-b border-border/60 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="font-black text-base text-foreground">
-                          Table {row.table_label}
+                          {row.table_label}
                         </span>
                         {getModeBadge(row.mode)}
                       </div>

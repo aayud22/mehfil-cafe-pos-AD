@@ -169,8 +169,8 @@ export function HistoryFiltersCard({
               </Button>
             </div>
 
-            {/* Inputs: From, To, Mode */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* Inputs: From, To, Mode, Order Type */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label htmlFor="filter-from-date" className="text-xs text-muted-foreground">
                   From Date
@@ -199,27 +199,51 @@ export function HistoryFiltersCard({
               </div>
 
               {filters.tab === 'bills' ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor="filter-payment-mode" className="text-xs text-muted-foreground">
-                    Payment Mode
-                  </Label>
-                  <Select
-                    value={filters.mode || 'all'}
-                    onValueChange={(val) =>
-                      onFilterChange({ mode: val === 'all' ? undefined : (val as any), page: 1 })
-                    }
-                  >
-                    <SelectTrigger id="filter-payment-mode" className="h-11 text-xs bg-background border-border">
-                      <SelectValue placeholder="All modes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="text-xs">All Payments</SelectItem>
-                      <SelectItem value="cash" className="text-xs">Cash</SelectItem>
-                      <SelectItem value="upi" className="text-xs">UPI</SelectItem>
-                      <SelectItem value="card" className="text-xs">Card</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="filter-payment-mode" className="text-xs text-muted-foreground">
+                      Payment Mode
+                    </Label>
+                    <Select
+                      value={filters.mode || 'all'}
+                      onValueChange={(val) =>
+                        onFilterChange({ mode: val === 'all' ? undefined : (val as any), page: 1 })
+                      }
+                    >
+                      <SelectTrigger id="filter-payment-mode" className="h-11 text-xs bg-background border-border">
+                        <SelectValue placeholder="All modes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" className="text-xs">All Payments</SelectItem>
+                        <SelectItem value="cash" className="text-xs">Cash</SelectItem>
+                        <SelectItem value="upi" className="text-xs">UPI</SelectItem>
+                        <SelectItem value="card" className="text-xs">Card</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="filter-order-type" className="text-xs text-muted-foreground">
+                      Order Type
+                    </Label>
+                    <Select
+                      value={filters.order_type || 'all'}
+                      onValueChange={(val) =>
+                        onFilterChange({ order_type: val === 'all' ? undefined : (val as any), page: 1 })
+                      }
+                    >
+                      <SelectTrigger id="filter-order-type" className="h-11 text-xs bg-background border-border">
+                        <SelectValue placeholder="All types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" className="text-xs">All Order Types</SelectItem>
+                        <SelectItem value="dine_in" className="text-xs">Dine-in</SelectItem>
+                        <SelectItem value="takeaway" className="text-xs">Takeaway</SelectItem>
+                        <SelectItem value="delivery" className="text-xs">Delivery</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
               ) : (
                 <div className="flex items-end">
                   <Button

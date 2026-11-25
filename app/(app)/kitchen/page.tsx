@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChefHat, Clock, CheckCircle2, Flame, Utensils, Loader2 } from 'lucide-react';
 import { OrderStatus } from '@/types/database';
+import { getOrderDisplayLabel } from '@/lib/order-label';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { toast } from 'sonner';
 
@@ -23,6 +24,7 @@ export default function KitchenPage() {
     const ordersByTable: Record<string, typeof orders> = {};
 
     orders.forEach((o) => {
+      if (!o.table_id) return;
       if (!ordersByTable[o.table_id]) {
         ordersByTable[o.table_id] = [];
       }
@@ -162,10 +164,20 @@ export default function KitchenPage() {
               >
                 <div>
                   <div className="flex items-center justify-between border-b border-border pb-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xl font-black text-primary">
-                        Table {order.table?.label || 'T-?'}
+                        {getOrderDisplayLabel(order)}
                       </span>
+                      {order.order_type === 'takeaway' && (
+                        <Badge className="bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] uppercase font-bold">
+                          Takeaway
+                        </Badge>
+                      )}
+                      {order.order_type === 'delivery' && (
+                        <Badge className="bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[10px] uppercase font-bold">
+                          Delivery
+                        </Badge>
+                      )}
                       {pos && pos.totalRounds > 1 && (
                         <Badge
                           variant="secondary"
@@ -177,6 +189,12 @@ export default function KitchenPage() {
                     </div>
                     {getStatusBadge(order.status)}
                   </div>
+
+                  {order.customer_name && (
+                    <p className="mt-2 text-xs font-semibold text-foreground">
+                      Customer: {order.customer_name}
+                    </p>
+                  )}
 
                   <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Clock className="h-3.5 w-3.5" />

@@ -11,48 +11,27 @@ export async function createOrderAction(input: OrderInput) {
   }
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
 
-  // 1. Create order
-  const { data: order, error: orderErr } = await supabase
-    .from("orders")
-    .insert({
-      table_id: parsed.data.table_id,
-      waiter_id: user?.id || null,
-      status: "new",
-      note: parsed.data.note || null,
-    })
-    .select()
-    .single()
+  const { data: orderId, error } = await supabase.rpc("create_order", {
+    p_table_id: parsed.data.order_type === "dine_in" ? parsed.data.table_id ?? null : null,
+    p_note: parsed.data.note || null,
+    p_items: parsed.data.items.map((item) => ({
+      menu_item_id: item.menu_item_id,
+      quantity: item.quantity,
+      note: item.note || null,
+    })),
+    p_order_type: parsed.data.order_type,
+    p_customer_name: parsed.data.customer_name || null,
+  })
 
-  if (orderErr || !order) {
-    return { error: orderErr?.message || "Failed to create order" }
+  if (error) {
+    return { error: error.message }
   }
-
-  // 2. Insert order items
-  const items = parsed.data.items.map((item) => ({
-    order_id: order.id,
-    menu_item_id: item.menu_item_id,
-    quantity: item.quantity,
-    unit_price: item.unit_price,
-    note: item.note || null,
-  }))
-
-  const { error: itemsErr } = await supabase.from("order_items").insert(items)
-  if (itemsErr) {
-    return { error: itemsErr.message }
-  }
-
-  // 3. Mark table occupied
-  await supabase
-    .from("cafe_tables")
-    .update({ status: "occupied" })
-    .eq("id", parsed.data.table_id)
 
   revalidatePath("/kitchen")
   revalidatePath("/waiter")
   revalidatePath("/cashier")
-  return { success: true, orderId: order.id }
+  return { success: true, orderId: String(orderId) }
 }
 
 export async function updateOrderStatusAction(

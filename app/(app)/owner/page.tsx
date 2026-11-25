@@ -304,7 +304,7 @@ export default function OwnerDashboardPage() {
               {formatMoney(profit)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Net sales ({formatMoney(netSales)}) minus expenses
+              Dine-in: {stats.orders_by_type?.dine_in ?? totalOrders} · Takeaway: {stats.orders_by_type?.takeaway ?? 0} · Delivery: {stats.orders_by_type?.delivery ?? 0}
             </p>
           </CardContent>
         </Card>

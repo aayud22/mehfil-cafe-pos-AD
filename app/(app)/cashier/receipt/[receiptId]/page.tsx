@@ -26,7 +26,7 @@ export default async function ReceiptPage({ params }: PageProps) {
       .single(),
     supabase
       .from('order_items')
-      .select(`id, quantity, unit_price, voided_at, menu_item:menu_items(name)`)
+      .select(`id, quantity, unit_price, voided_at, menu_item:menu_items(name), order:orders(token_number, customer_name, order_type)`)
       .eq('bill_id', receiptId)
       .is('voided_at', null),
     supabase
@@ -108,7 +108,18 @@ export default async function ReceiptPage({ params }: PageProps) {
   const mergedItems = Object.values(itemMap);
 
   const tableObj = Array.isArray(bill.table) ? bill.table[0] : bill.table;
-  const tableLabel = tableObj?.label || 'Table';
+  const firstOrderObj = items[0]?.order
+    ? Array.isArray(items[0].order)
+      ? items[0].order[0]
+      : items[0].order
+    : null;
+  const billOrderType = bill.order_type || firstOrderObj?.order_type || 'dine_in';
+  const orderTargetLabel =
+    billOrderType === 'takeaway'
+      ? `Takeaway #${firstOrderObj?.token_number ?? '?'}`
+      : billOrderType === 'delivery'
+      ? `Delivery #${firstOrderObj?.token_number ?? '?'}`
+      : `Table ${tableObj?.label || 'Table'}`;
   const billNumber = receiptId.slice(0, 8).toUpperCase();
   const billDate = bill.created_at || payments[0]?.paid_at || new Date().toISOString();
 
@@ -180,9 +191,9 @@ export default async function ReceiptPage({ params }: PageProps) {
             </span>
           </div>
           <div className="flex justify-between">
-            <span>Table:</span>
+            <span>Order:</span>
             <span className="font-bold text-foreground print:text-black">
-              Table {tableLabel}
+              {orderTargetLabel}
             </span>
           </div>
           <div className="flex justify-between">
