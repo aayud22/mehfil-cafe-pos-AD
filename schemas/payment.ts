@@ -31,7 +31,8 @@ export const payTableSchema = z
   .object({
     table_id: z.string().uuid("Valid table ID is required").nullable().optional(),
     order_id: z.string().uuid("Valid order ID is required").nullable().optional(),
-    item_ids: z.array(z.string().uuid()).nonempty().nullable().optional(),
+    split_mode: z.boolean().optional().default(false),
+    item_ids: z.array(z.string().uuid("Each item ID must be a valid UUID")).nullable().optional(),
     payments: z.array(paymentLineSchema).min(1, "At least one payment line is required"),
     discount_type: z.enum(["none", "percent", "flat"]).default("none"),
     discount_value: z.coerce.number().min(0, "Discount cannot be negative").default(0),
@@ -41,6 +42,13 @@ export const payTableSchema = z
     message: "Table or order is required",
     path: ["table_id"],
   })
+  .refine(
+    (data) => !data.split_mode || (Array.isArray(data.item_ids) && data.item_ids.length > 0),
+    {
+      message: "Select at least one item when split bill is enabled",
+      path: ["item_ids"],
+    }
+  )
   .refine(
     (data) =>
       data.discount_type === "none" ||
@@ -53,4 +61,4 @@ export const payTableSchema = z
 
 export type PaymentInput = z.infer<typeof paymentSchema>;
 export type PaymentLineInput = z.infer<typeof paymentLineSchema>;
-export type PayTableInput = z.infer<typeof payTableSchema>;
+export type PayTableInput = z.input<typeof payTableSchema>;

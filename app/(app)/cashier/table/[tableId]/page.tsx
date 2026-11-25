@@ -16,6 +16,7 @@ import { DISCOUNT_REASONS } from '@/schemas/payment';
 import { payTable } from '@/app/actions/payments';
 import { cancelOrder, voidOrderItem } from '@/app/actions/cancel';
 import { formatMoney, formatTime } from '@/lib/format';
+import { splitAmountEquallyInPaise, formatPaiseToInput } from '@/lib/split-payment';
 import { CancelReasonDialog } from '@/components/orders/CancelReasonDialog';
 import { UpiQrCard } from '@/components/cashier/UpiQrCard';
 import { toast } from 'sonner';
@@ -45,6 +46,8 @@ import {
   Trash2,
   Percent,
   IndianRupee,
+  Split,
+  Users,
 } from 'lucide-react';
 
 interface PaymentLineState {
@@ -86,6 +89,11 @@ export default function CashierTableBillPage({
     { id: 'line-1', mode: 'cash', amount: '' },
   ]);
   const [userEditedPayments, setUserEditedPayments] = useState(false);
+
+  // Split bill & split equally state
+  const [splitMode, setSplitMode] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [splitPeopleCount, setSplitPeopleCount] = useState<number>(2);
 
   // Cancellation dialog state
   const [dialogState, setDialogState] = useState<{
@@ -160,9 +168,45 @@ export default function CashierTableBillPage({
     };
   }, [supabase, resolvedParams.tableId, loadTableAndOrders]);
 
+  // All served, unbilled, non-voided item IDs eligible for split selection
+  const selectableItemIds = useMemo(() => {
+    const ids: string[] = [];
+    orders.forEach((ord) => {
+      if (ord.status !== 'served') return;
+      (ord.order_items || []).forEach((item) => {
+        if (!item.voided_at && !(item as { bill_id?: string | null }).bill_id) {
+          ids.push(item.id);
+        }
+      });
+    });
+    return ids;
+  }, [orders]);
+
+  // Prune selectedItemIds whenever orders reload (e.g. partial bill or void)
+  useEffect(() => {
+    setSelectedItemIds((prev) => prev.filter((id) => selectableItemIds.includes(id)));
+  }, [selectableItemIds]);
+
   // Debounced 300ms call to get_bill_preview RPC
   useEffect(() => {
     if (loading) return;
+
+    if (splitMode && selectedItemIds.length === 0) {
+      setPreviewError(null);
+      setPreviewLoading(false);
+      setPreview((prev) => ({
+        subtotal: 0,
+        discount_amount: 0,
+        tax_rate: prev?.tax_rate ?? 0,
+        tax_amount: 0,
+        round_off: 0,
+        total: 0,
+      }));
+      if (!userEditedPayments) {
+        setPaymentLines([{ id: 'line-1', mode: 'cash', amount: '0' }]);
+      }
+      return;
+    }
 
     const timer = setTimeout(async () => {
       setPreviewLoading(true);
@@ -172,7 +216,7 @@ export default function CashierTableBillPage({
       const { data, error } = await supabase.rpc('get_bill_preview', {
         p_table_id: resolvedParams.tableId,
         p_order_id: null,
-        p_item_ids: null,
+        p_item_ids: splitMode ? selectedItemIds : null,
         p_discount_type: discountType,
         p_discount_value: numVal,
       });
@@ -201,7 +245,17 @@ export default function CashierTableBillPage({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [loading, orders, discountType, discountValue, resolvedParams.tableId, supabase, userEditedPayments]);
+  }, [
+    loading,
+    orders,
+    discountType,
+    discountValue,
+    resolvedParams.tableId,
+    supabase,
+    userEditedPayments,
+    splitMode,
+    selectedItemIds,
+  ]);
 
   const hasUnfinishedKitchenOrders = useMemo(
     () => orders.some((o) => o.status === 'new' || o.status === 'preparing' || o.status === 'ready'),
@@ -276,8 +330,53 @@ export default function CashierTableBillPage({
     );
   };
 
+  const handleToggleSplitMode = () => {
+    setSplitMode((prev) => {
+      const next = !prev;
+      setSelectedItemIds([]);
+      setUserEditedPayments(false);
+      return next;
+    });
+  };
+
+  const handleToggleItemSelection = (itemId: string) => {
+    setUserEditedPayments(false);
+    setSelectedItemIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    );
+  };
+
+  const handleSelectAllItems = () => {
+    setUserEditedPayments(false);
+    setSelectedItemIds(selectableItemIds);
+  };
+
+  const handleClearSelectedItems = () => {
+    setUserEditedPayments(false);
+    setSelectedItemIds([]);
+  };
+
+  const handleSplitEqually = () => {
+    if (!preview || preview.total <= 0) return;
+    const amounts = splitAmountEquallyInPaise(preview.total, splitPeopleCount);
+    setUserEditedPayments(true);
+    setPaymentLines((prev) =>
+      amounts.map((amt, idx) => ({
+        id: `split-${Date.now()}-${idx}`,
+        mode: prev[idx]?.mode ?? 'cash',
+        amount: formatPaiseToInput(amt),
+        confirmed: false,
+      }))
+    );
+  };
+
   const handleSettleTable = async () => {
     if (!table || !preview) return;
+
+    if (splitMode && selectedItemIds.length === 0) {
+      toast.error('Select at least one item to bill');
+      return;
+    }
 
     if (discountType !== 'none' && !finalDiscountReason) {
       toast.error('Please select or enter a discount reason');
@@ -293,6 +392,8 @@ export default function CashierTableBillPage({
     try {
       const res = await payTable({
         table_id: table.id,
+        split_mode: splitMode,
+        item_ids: splitMode ? selectedItemIds : null,
         payments: paymentLines.map((l) => ({
           mode: l.mode,
           amount: parseFloat(l.amount) || 0,
@@ -304,11 +405,21 @@ export default function CashierTableBillPage({
 
       if (!res.ok) {
         toast.error('Settlement Failed', { description: res.error });
+        if (
+          res.error.toLowerCase().includes('already billed') ||
+          res.error.toLowerCase().includes('refresh')
+        ) {
+          await loadTableAndOrders();
+        }
         setIsProcessing(false);
         return;
       }
 
-      toast.success(`Table ${table.label} settled successfully!`);
+      toast.success(
+        splitMode
+          ? `Partial bill settled for Table ${table.label}!`
+          : `Table ${table.label} settled successfully!`
+      );
       router.push(`/cashier/receipt/${res.billId}`);
       router.refresh();
     } catch {
@@ -336,7 +447,7 @@ export default function CashierTableBillPage({
     previewLoading ||
     !preview ||
     preview.total <= 0 ||
-    hasUnfinishedKitchenOrders ||
+    (splitMode ? selectedItemIds.length === 0 : hasUnfinishedKitchenOrders) ||
     remainingPaise !== 0 ||
     hasUnconfirmedUpi ||
     (discountType !== 'none' && !finalDiscountReason);
@@ -386,11 +497,50 @@ export default function CashierTableBillPage({
 
       {/* Unbilled Rounds & Items */}
       <Card className="border-border shadow-md">
-        <CardHeader className="pb-3 border-b border-border">
-          <CardTitle className="text-base md:text-lg">Unbilled Items Breakdown</CardTitle>
-          <CardDescription className="text-xs">
-            Served items awaiting billing for Table {table.label}
-          </CardDescription>
+        <CardHeader className="pb-3 border-b border-border space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base md:text-lg">Unbilled Items Breakdown</CardTitle>
+              <CardDescription className="text-xs">
+                {splitMode
+                  ? `Select items to include in this bill (${selectedItemIds.length} of ${selectableItemIds.length} selected)`
+                  : `Served items awaiting billing for Table ${table.label}`}
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant={splitMode ? 'default' : 'outline'}
+              onClick={handleToggleSplitMode}
+              disabled={selectableItemIds.length === 0}
+              className="h-11 gap-2 text-xs font-bold"
+            >
+              <Split className="h-4 w-4" />
+              <span>{splitMode ? 'Split Bill: On' : 'Split Bill'}</span>
+            </Button>
+          </div>
+
+          {splitMode && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSelectAllItems}
+                disabled={selectableItemIds.length === 0}
+                className="h-11 px-4 text-xs font-bold"
+              >
+                Select all ({selectableItemIds.length})
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClearSelectedItems}
+                disabled={selectedItemIds.length === 0}
+                className="h-11 px-4 text-xs font-bold"
+              >
+                Clear
+              </Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="pt-4 space-y-4">
           {orders.length === 0 ? (
@@ -447,10 +597,25 @@ export default function CashierTableBillPage({
                   </div>
 
                   <div className="divide-y divide-border/50 text-xs">
-                    {activeItems.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between py-1.5">
-                        <div className="flex items-center gap-2">
-                          {isCancellable && (
+                    {activeItems.map((item) => {
+                      const isServed = ord.status === 'served';
+                      const isChecked = selectedItemIds.includes(item.id);
+                      return (
+                      <div key={item.id} className="flex items-center justify-between py-2 gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {splitMode && (
+                            <label className="flex h-11 w-11 shrink-0 items-center justify-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                disabled={!isServed}
+                                onChange={() => handleToggleItemSelection(item.id)}
+                                className="h-5 w-5 rounded border-border accent-emerald-500 cursor-pointer disabled:opacity-40"
+                                aria-label={`Select ${item.menu_item?.name || 'Item'}`}
+                              />
+                            </label>
+                          )}
+                          {isCancellable && !splitMode && (
                             <button
                               type="button"
                               onClick={() =>
@@ -467,7 +632,7 @@ export default function CashierTableBillPage({
                               <X className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <div>
+                          <div className="min-w-0">
                             <span className="font-medium text-foreground block">
                               {item.quantity} × {item.menu_item?.name || 'Item'}
                             </span>
@@ -476,13 +641,19 @@ export default function CashierTableBillPage({
                                 {item.modifiers.map((m) => m.option).join(', ')}
                               </span>
                             )}
+                            {splitMode && !isServed && (
+                              <span className="text-[10px] font-semibold text-amber-400">
+                                In kitchen (not served yet)
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <span className="font-semibold text-foreground">
+                        <span className="font-semibold text-foreground shrink-0">
                           {formatMoney(Number(item.unit_price) * item.quantity)}
                         </span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -645,19 +816,50 @@ export default function CashierTableBillPage({
 
         {/* Right: Payment Lines */}
         <Card className="border-border shadow-md flex flex-col justify-between">
-          <CardHeader className="pb-3 border-b border-border">
-            <div className="flex items-center justify-between">
+          <CardHeader className="pb-3 border-b border-border space-y-3">
+            <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base">Payment Lines</CardTitle>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleAddPaymentLine}
-                disabled={hasUnfinishedKitchenOrders}
-                className="h-9 text-xs font-bold gap-1"
+                disabled={!splitMode && hasUnfinishedKitchenOrders}
+                className="h-11 px-3 text-xs font-bold gap-1"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Add payment</span>
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 p-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                <Users className="h-3.5 w-3.5 text-primary" />
+                <span>Split between</span>
+              </div>
+              <Select
+                value={String(splitPeopleCount)}
+                onValueChange={(v) => setSplitPeopleCount(Number(v))}
+              >
+                <SelectTrigger className="h-11 w-24 text-xs font-bold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <SelectItem key={n} value={String(n)} className="text-xs">
+                      {n} people
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSplitEqually}
+                disabled={!preview || preview.total <= 0}
+                className="h-11 px-3 text-xs font-bold ml-auto"
+              >
+                Split equally
               </Button>
             </div>
           </CardHeader>
