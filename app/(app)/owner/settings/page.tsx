@@ -22,6 +22,8 @@ export default async function OwnerSettingsPage() {
     gst_rate: 5,
     cashier_max_discount_percent: 10,
     manager_max_discount_percent: 25,
+    upi_id: null,
+    upi_payee_name: null,
   };
 
   return <SettingsForm initialSettings={initialSettings} />;

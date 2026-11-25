@@ -37,6 +37,23 @@ export const appSettingsSchema = z.object({
     .number()
     .min(0, 'Must be between 0 and 100')
     .max(100, 'Must be between 0 and 100'),
+  upi_id: z
+    .string()
+    .trim()
+    .refine(
+      (val) => val === '' || /^[a-zA-Z0-9._-]{2,64}@[a-zA-Z]{2,32}$/.test(val),
+      'Invalid UPI ID format (e.g. mehfilcafe@okaxis)'
+    )
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+  upi_payee_name: z
+    .string()
+    .trim()
+    .max(40, 'Payee name must be 40 characters or less')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
 });
 
 export type AppSettingsInput = z.infer<typeof appSettingsSchema>;

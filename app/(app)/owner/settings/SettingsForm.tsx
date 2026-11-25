@@ -22,7 +22,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Settings, Save, Loader2, Percent, Store, ShieldCheck } from 'lucide-react';
+import { Settings, Save, Loader2, Percent, Store, ShieldCheck, QrCode } from 'lucide-react';
 
 interface SettingsFormProps {
   initialSettings: AppSettings;
@@ -41,6 +41,8 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       gst_rate: Number(initialSettings.gst_rate ?? 5),
       cashier_max_discount_percent: Number(initialSettings.cashier_max_discount_percent ?? 10),
       manager_max_discount_percent: Number(initialSettings.manager_max_discount_percent ?? 25),
+      upi_id: initialSettings.upi_id || '',
+      upi_payee_name: initialSettings.upi_payee_name || '',
     },
   });
 
@@ -248,6 +250,59 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                         max={100}
                         className="h-11 text-sm font-bold"
                         {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Dynamic UPI QR Settings */}
+          <Card className="border-border bg-card/60">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <QrCode className="h-4 w-4 text-purple-400" />
+                <span>Dynamic UPI QR</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Generates live payment QR codes on the Cashier checkout screen. For demo use, enter a fake UPI ID (e.g. mehfilcafe@okaxis).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="upi_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">UPI ID (VPA)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="mehfilcafe@okaxis"
+                        className="h-11 text-sm font-mono"
+                        {...field}
+                        value={field.value ?? ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="upi_payee_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Payee Display Name (Max 40)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Mehfil Cafe"
+                        maxLength={40}
+                        className="h-11 text-sm"
+                        {...field}
+                        value={field.value ?? ''}
                       />
                     </FormControl>
                     <FormMessage />

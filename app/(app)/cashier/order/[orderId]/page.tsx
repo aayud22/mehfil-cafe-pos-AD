@@ -15,6 +15,7 @@ import {
   SelectContent,
   SelectTrigger,
 } from '@/components/ui/select';
+import { UpiQrCard } from '@/components/cashier/UpiQrCard';
 import {
   X,
   Ban,
@@ -48,6 +49,7 @@ interface PaymentLineState {
   id: string;
   mode: PaymentMode;
   amount: string;
+  confirmed?: boolean;
 }
 
 export default function CashierOrderBillPage({
@@ -258,6 +260,9 @@ export default function CashierOrderBillPage({
   const taxHalfRate = (preview?.tax_rate ?? 0) / 2;
   const cgstAmount = (preview?.tax_amount ?? 0) / 2;
   const sgstAmount = (preview?.tax_amount ?? 0) - cgstAmount;
+  const hasUnconfirmedUpi = paymentLines.some(
+    (l) => l.mode === 'upi' && (parseFloat(l.amount) || 0) > 0 && !l.confirmed
+  );
   const isPayDisabled =
     isProcessing ||
     previewLoading ||
@@ -265,6 +270,7 @@ export default function CashierOrderBillPage({
     preview.total <= 0 ||
     isUnfinished ||
     remainingPaise !== 0 ||
+    hasUnconfirmedUpi ||
     (discountType !== 'none' && !finalDiscountReason);
 
   return (
@@ -516,14 +522,17 @@ export default function CashierOrderBillPage({
           </CardHeader>
           <CardContent className="pt-4 space-y-4 flex-1 flex flex-col justify-between">
             <div className="space-y-3">
-              {paymentLines.map((line) => (
-                <div key={line.id} className="flex items-center gap-2 rounded-xl border border-border bg-muted/20 p-2.5">
+              {paymentLines.map((line) => {
+                const lineAmt = parseFloat(line.amount) || 0;
+                return (
+                <div key={line.id} className="space-y-2">
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/20 p-2.5">
                   <Select
                     value={line.mode}
                     onValueChange={(val) => {
                       setUserEditedPayments(true);
                       setPaymentLines((prev) =>
-                        prev.map((l) => (l.id === line.id ? { ...l, mode: val as PaymentMode } : l))
+                        prev.map((l) => (l.id === line.id ? { ...l, mode: val as PaymentMode, confirmed: false } : l))
                       );
                     }}
                   >
@@ -544,7 +553,7 @@ export default function CashierOrderBillPage({
                     onChange={(e) => {
                       setUserEditedPayments(true);
                       setPaymentLines((prev) =>
-                        prev.map((l) => (l.id === line.id ? { ...l, amount: e.target.value } : l))
+                        prev.map((l) => (l.id === line.id ? { ...l, amount: e.target.value, confirmed: false } : l))
                       );
                     }}
                     className="h-11 text-sm font-bold flex-1"
@@ -564,7 +573,23 @@ export default function CashierOrderBillPage({
                     </Button>
                   )}
                 </div>
-              ))}
+                {line.mode === 'upi' && lineAmt > 0 && (
+                  <UpiQrCard
+                    upiId={settings?.upi_id}
+                    payeeName={settings?.upi_payee_name || settings?.cafe_name}
+                    amount={lineAmt}
+                    noteLabel={`Bill ${label}`}
+                    confirmed={Boolean(line.confirmed)}
+                    onConfirmedChange={(checked) => {
+                      setPaymentLines((prev) =>
+                        prev.map((l) => (l.id === line.id ? { ...l, confirmed: checked } : l))
+                      );
+                    }}
+                  />
+                )}
+                </div>
+                );
+              })}
               <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-xs">
                 <span className="text-muted-foreground font-semibold">Remaining:</span>
                 <span className={`font-black ${remainingPaise === 0 ? 'text-emerald-500' : 'text-amber-400'}`}>

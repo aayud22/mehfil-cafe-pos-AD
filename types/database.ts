@@ -161,6 +161,8 @@ export interface AppSettings {
   gst_rate: number;
   cashier_max_discount_percent: number;
   manager_max_discount_percent: number;
+  upi_id?: string | null;
+  upi_payee_name?: string | null;
 }
 
 export interface Bill {

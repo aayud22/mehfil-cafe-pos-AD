@@ -17,6 +17,7 @@ import { payTable } from '@/app/actions/payments';
 import { cancelOrder, voidOrderItem } from '@/app/actions/cancel';
 import { formatMoney, formatTime } from '@/lib/format';
 import { CancelReasonDialog } from '@/components/orders/CancelReasonDialog';
+import { UpiQrCard } from '@/components/cashier/UpiQrCard';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -50,6 +51,7 @@ interface PaymentLineState {
   id: string;
   mode: PaymentMode;
   amount: string;
+  confirmed?: boolean;
 }
 
 export default function CashierTableBillPage({
@@ -239,7 +241,7 @@ export default function CashierTableBillPage({
     const fillAmount = remainingPaise > 0 ? (remainingPaise / 100).toFixed(2).replace(/\.00$/, '') : '';
     setPaymentLines((prev) => [
       ...prev,
-      { id: `line-${Date.now()}`, mode: 'upi', amount: fillAmount },
+      { id: `line-${Date.now()}`, mode: 'upi', amount: fillAmount, confirmed: false },
     ]);
   };
 
@@ -251,7 +253,13 @@ export default function CashierTableBillPage({
   const handleUpdateLine = (id: string, field: 'mode' | 'amount', val: string) => {
     setUserEditedPayments(true);
     setPaymentLines((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, [field]: val } : l))
+      prev.map((l) => (l.id === id ? { ...l, [field]: val, confirmed: false } : l))
+    );
+  };
+
+  const handleToggleUpiConfirmed = (id: string, checked: boolean) => {
+    setPaymentLines((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, confirmed: checked } : l))
     );
   };
 
@@ -263,7 +271,7 @@ export default function CashierTableBillPage({
     const rem = Math.max(0, totalPaise - otherPaise) / 100;
     setPaymentLines((prev) =>
       prev.map((l) =>
-        l.id === id ? { ...l, amount: rem.toFixed(2).replace(/\.00$/, '') } : l
+        l.id === id ? { ...l, amount: rem.toFixed(2).replace(/\.00$/, ''), confirmed: false } : l
       )
     );
   };
@@ -320,6 +328,9 @@ export default function CashierTableBillPage({
   const taxHalfRate = (preview?.tax_rate ?? 0) / 2;
   const cgstAmount = (preview?.tax_amount ?? 0) / 2;
   const sgstAmount = (preview?.tax_amount ?? 0) - cgstAmount;
+  const hasUnconfirmedUpi = paymentLines.some(
+    (l) => l.mode === 'upi' && (parseFloat(l.amount) || 0) > 0 && !l.confirmed
+  );
   const isPayDisabled =
     isProcessing ||
     previewLoading ||
@@ -327,6 +338,7 @@ export default function CashierTableBillPage({
     preview.total <= 0 ||
     hasUnfinishedKitchenOrders ||
     remainingPaise !== 0 ||
+    hasUnconfirmedUpi ||
     (discountType !== 'none' && !finalDiscountReason);
 
   return (
@@ -652,9 +664,11 @@ export default function CashierTableBillPage({
 
           <CardContent className="pt-4 space-y-4 flex-1 flex flex-col justify-between">
             <div className="space-y-3">
-              {paymentLines.map((line, index) => (
+              {paymentLines.map((line, index) => {
+                const lineAmt = parseFloat(line.amount) || 0;
+                return (
+                <div key={line.id} className="space-y-2">
                 <div
-                  key={line.id}
                   className="flex items-center gap-2 rounded-xl border border-border bg-muted/20 p-2.5"
                 >
                   <Select
@@ -705,7 +719,19 @@ export default function CashierTableBillPage({
                     </Button>
                   )}
                 </div>
-              ))}
+                {line.mode === 'upi' && lineAmt > 0 && (
+                  <UpiQrCard
+                    upiId={settings?.upi_id}
+                    payeeName={settings?.upi_payee_name || settings?.cafe_name}
+                    amount={lineAmt}
+                    noteLabel={`Bill Table ${table.label}`}
+                    confirmed={Boolean(line.confirmed)}
+                    onConfirmedChange={(checked) => handleToggleUpiConfirmed(line.id, checked)}
+                  />
+                )}
+                </div>
+                );
+              })}
 
               {/* Remaining Indicator */}
               <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-xs">

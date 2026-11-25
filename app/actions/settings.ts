@@ -39,6 +39,8 @@ export async function updateAppSettingsAction(input: AppSettingsInput) {
       gst_rate: parsed.data.gst_rate,
       cashier_max_discount_percent: parsed.data.cashier_max_discount_percent,
       manager_max_discount_percent: parsed.data.manager_max_discount_percent,
+      upi_id: parsed.data.upi_id ? parsed.data.upi_id.trim() : null,
+      upi_payee_name: parsed.data.upi_payee_name ? parsed.data.upi_payee_name.trim() : null,
     })
     .eq('id', 1);
 
