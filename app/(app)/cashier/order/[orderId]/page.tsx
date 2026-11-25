@@ -359,9 +359,16 @@ export default function CashierOrderBillPage({
                     <X className="h-3.5 w-3.5" />
                   </button>
                 )}
-                <span className="font-medium text-foreground">
-                  {item.quantity} × {item.menu_item?.name || 'Item'}
-                </span>
+                <div>
+                  <span className="font-medium text-foreground block">
+                    {item.quantity} × {item.menu_item?.name || 'Item'}
+                  </span>
+                  {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
+                    <span className="text-[11px] text-muted-foreground block">
+                      {item.modifiers.map((m) => m.option).join(', ')}
+                    </span>
+                  )}
+                </div>
               </div>
               <span className="font-semibold text-foreground">
                 {formatMoney(Number(item.unit_price) * item.quantity)}

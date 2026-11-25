@@ -14,6 +14,30 @@ export interface MenuCategory {
   sort_order: number;
 }
 
+export interface ModifierOption {
+  id: string;
+  group_id: string;
+  name: string;
+  price_delta: number;
+  is_available: boolean;
+  sort_order: number;
+}
+
+export interface ModifierGroup {
+  id: string;
+  name: string;
+  selection_type: 'single' | 'multiple';
+  is_required: boolean;
+  max_select: number | null;
+  options?: ModifierOption[];
+}
+
+export interface OrderItemModifierSnapshot {
+  group: string;
+  option: string;
+  price_delta: number;
+}
+
 export interface MenuItem {
   id: string;
   category_id: string;
@@ -22,6 +46,7 @@ export interface MenuItem {
   is_available: boolean;
   created_at: string;
   category?: MenuCategory;
+  modifier_groups?: Array<{ group_id: string; sort_order: number; group?: ModifierGroup }>;
 }
 
 export type TableStatus = 'free' | 'occupied';
@@ -63,6 +88,7 @@ export interface OrderItem {
   quantity: number;
   unit_price: number;
   note: string | null;
+  modifiers?: OrderItemModifierSnapshot[];
   voided_at?: string | null;
   voided_by?: string | null;
   void_reason?: string | null;

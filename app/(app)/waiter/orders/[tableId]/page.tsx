@@ -3,12 +3,13 @@
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { MenuItem, MenuCategory, CafeTable, Order, UserRole, OrderStatus } from '@/types/database';
+import { MenuItem, MenuCategory, CafeTable, Order, UserRole, OrderStatus, ModifierGroup, ModifierOption } from '@/types/database';
 import { orderSchema, OrderInput } from '@/schemas/order';
 import { createOrderAction, updateOrderStatusAction } from '@/app/actions/orders';
 import { cancelOrder, voidOrderItem } from '@/app/actions/cancel';
 import { formatMoney, formatTime } from '@/lib/format';
 import { CancelReasonDialog } from '@/components/orders/CancelReasonDialog';
+import { ModifierDrawer } from '@/components/orders/ModifierDrawer';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -41,8 +42,10 @@ import {
 } from 'lucide-react';
 
 interface CartItem {
+  key: string;
   menuItem: MenuItem;
   quantity: number;
+  selectedOptions: ModifierOption[];
   note?: string;
 }
 
@@ -65,6 +68,7 @@ export default function WaiterOrderPage({
   const [orderNote, setOrderNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modDrawerItem, setModDrawerItem] = useState<MenuItem | null>(null);
   const [isAddingMore, setIsAddingMore] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -135,7 +139,7 @@ export default function WaiterOrderPage({
 
     const { data: itemsData } = await supabase
       .from('menu_items')
-      .select('*')
+      .select('*, modifier_groups:menu_item_modifier_groups(sort_order, group:modifier_groups(*, options:modifier_options(*)))')
       .eq('is_available', true);
     if (itemsData) setMenuItems(itemsData as MenuItem[]);
 
@@ -163,41 +167,78 @@ export default function WaiterOrderPage({
     };
   }, [resolvedParams.tableId]);
 
-  const addToCart = (item: MenuItem) => {
+  const getSortedGroups = (item: MenuItem): ModifierGroup[] => {
+    const raw = item.modifier_groups || [];
+    return [...raw]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((m) => m.group)
+      .filter((g): g is ModifierGroup => Boolean(g));
+  };
+
+  const handleMenuItemTap = (item: MenuItem) => {
+    const groups = getSortedGroups(item);
+    if (groups.length > 0) {
+      setModDrawerItem(item);
+    } else {
+      addToCart(item, [], '');
+    }
+  };
+
+  const addToCart = (item: MenuItem, selectedOptions: ModifierOption[] = [], note = '') => {
+    const optIds = selectedOptions.map((o) => o.id).sort();
+    const cartKey = `${item.id}__${optIds.join(',')}__${note.trim()}`;
     setCart((prev) => {
-      const existing = prev[item.id];
+      const existing = prev[cartKey];
       if (existing) {
         return {
           ...prev,
-          [item.id]: { ...existing, quantity: existing.quantity + 1 },
+          [cartKey]: { ...existing, quantity: existing.quantity + 1 },
         };
       }
       return {
         ...prev,
-        [item.id]: { menuItem: item, quantity: 1 },
+        [cartKey]: {
+          key: cartKey,
+          menuItem: item,
+          quantity: 1,
+          selectedOptions,
+          note: note.trim() || undefined,
+        },
       };
     });
   };
 
-  const removeFromCart = (itemId: string) => {
+  const incrementCartKey = (cartKey: string) => {
     setCart((prev) => {
-      const existing = prev[itemId];
+      const existing = prev[cartKey];
+      if (!existing) return prev;
+      return { ...prev, [cartKey]: { ...existing, quantity: existing.quantity + 1 } };
+    });
+  };
+
+  const removeFromCart = (cartKey: string) => {
+    setCart((prev) => {
+      const existing = prev[cartKey];
       if (!existing) return prev;
       if (existing.quantity <= 1) {
         const next = { ...prev };
-        delete next[itemId];
+        delete next[cartKey];
         return next;
       }
       return {
         ...prev,
-        [itemId]: { ...existing, quantity: existing.quantity - 1 },
+        [cartKey]: { ...existing, quantity: existing.quantity - 1 },
       };
     });
   };
 
+  const getCartItemUnitPrice = (c: CartItem) =>
+    Number(c.menuItem.price) +
+    c.selectedOptions.reduce((sum, o) => sum + Number(o.price_delta), 0);
+
   const cartList = Object.values(cart);
   const cartTotal = cartList.reduce(
-    (sum, item) => sum + Number(item.menuItem.price) * item.quantity,
+    (sum, item) => sum + getCartItemUnitPrice(item) * item.quantity,
     0
   );
   const cartCount = cartList.reduce((sum, item) => sum + item.quantity, 0);
@@ -237,7 +278,9 @@ export default function WaiterOrderPage({
         items: cartList.map((item) => ({
           menu_item_id: item.menuItem.id,
           quantity: item.quantity,
-          unit_price: Number(item.menuItem.price),
+          unit_price: getCartItemUnitPrice(item),
+          note: item.note || undefined,
+          modifier_option_ids: item.selectedOptions.map((o) => o.id),
         })),
       };
 
@@ -324,40 +367,51 @@ export default function WaiterOrderPage({
         </p>
       ) : (
         <div className="space-y-2.5 max-h-[38vh] overflow-y-auto divide-y divide-border">
-          {cartList.map(({ menuItem, quantity }) => (
-            <div
-              key={menuItem.id}
-              className="flex items-center justify-between pt-2 text-xs"
-            >
-              <div>
-                <p className="font-semibold text-foreground">{menuItem.name}</p>
-                <p className="text-muted-foreground text-[11px]">
-                  {quantity} × {formatMoney(Number(menuItem.price))}
-                </p>
+          {cartList.map((cartEntry) => {
+            const unitPrice = getCartItemUnitPrice(cartEntry);
+            return (
+              <div
+                key={cartEntry.key}
+                className="flex items-center justify-between pt-2 text-xs gap-2"
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground">{cartEntry.menuItem.name}</p>
+                  {cartEntry.selectedOptions.length > 0 && (
+                    <p className="text-[11px] text-primary/90 leading-snug">
+                      {cartEntry.selectedOptions.map((o) => o.name).join(', ')}
+                    </p>
+                  )}
+                  {cartEntry.note && (
+                    <p className="text-[11px] text-amber-400">Note: {cartEntry.note}</p>
+                  )}
+                  <p className="text-muted-foreground text-[11px]">
+                    {cartEntry.quantity} × {formatMoney(unitPrice)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-bold text-foreground">
+                    {formatMoney(unitPrice * cartEntry.quantity)}
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() => removeFromCart(cartEntry.key)}
+                  >
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="default"
+                    className="h-8 w-8"
+                    onClick={() => incrementCartKey(cartEntry.key)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-foreground">
-                  {formatMoney(Number(menuItem.price) * quantity)}
-                </span>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className="h-8 w-8"
-                  onClick={() => removeFromCart(menuItem.id)}
-                >
-                  <Minus className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="default"
-                  className="h-8 w-8"
-                  onClick={() => addToCart(menuItem)}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -676,42 +730,42 @@ export default function WaiterOrderPage({
               {/* Items Grid */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {filteredItems.map((item) => {
-                  const qty = cart[item.id]?.quantity || 0;
+                  const qty = cartList
+                    .filter((c) => c.menuItem.id === item.id)
+                    .reduce((s, c) => s + c.quantity, 0);
+                  const hasMods = getSortedGroups(item).length > 0;
                   return (
                     <Card
                       key={item.id}
-                      className="p-4 shadow-sm flex items-center justify-between"
+                      onClick={() => handleMenuItemTap(item)}
+                      className="p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-primary/50 transition"
                     >
                       <div>
                         <h4 className="text-sm font-semibold text-foreground">
                           {item.name}
                         </h4>
-                        <p className="text-xs font-bold text-primary mt-0.5">
-                          {formatMoney(item.price)}
-                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-xs font-bold text-primary">
+                            {formatMoney(item.price)}
+                          </p>
+                          {hasMods && (
+                            <span className="text-[10px] text-muted-foreground">Customizable</span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2">
                         {qty > 0 && (
-                          <>
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              className="h-11 w-11"
-                              onClick={() => removeFromCart(item.id)}
-                            >
-                              <Minus className="h-4 w-4" />
-                            </Button>
-                            <span className="w-5 text-center text-sm font-bold">
-                              {qty}
-                            </span>
-                          </>
+                          <Badge className="h-8 px-2.5 text-xs font-bold">{qty}×</Badge>
                         )}
                         <Button
                           size="icon"
                           variant="default"
                           className="h-11 w-11 shadow"
-                          onClick={() => addToCart(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMenuItemTap(item);
+                          }}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
@@ -797,6 +851,17 @@ export default function WaiterOrderPage({
           }
         }}
         onSuccess={loadData}
+      />
+
+      {/* Modifier Selection Drawer */}
+      <ModifierDrawer
+        open={Boolean(modDrawerItem)}
+        onOpenChange={(open) => !open && setModDrawerItem(null)}
+        menuItem={modDrawerItem}
+        groups={modDrawerItem ? getSortedGroups(modDrawerItem) : []}
+        onConfirm={(selectedOptions, note) => {
+          if (modDrawerItem) addToCart(modDrawerItem, selectedOptions, note);
+        }}
       />
     </div>
   );

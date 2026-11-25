@@ -11,6 +11,7 @@ import {
   FileBarChart,
   Settings,
   UtensilsCrossed,
+  SlidersHorizontal,
   Grid,
   Wallet,
   Package,
@@ -74,6 +75,14 @@ export function SidebarNav({ items, onItemClick }: SidebarNavProps) {
           <UtensilsCrossed
             className={`h-5 w-5 shrink-0 transition-colors ${
               isActive ? 'text-blue-500 scale-105' : 'text-blue-500/70'
+            }`}
+          />
+        );
+      case 'modifiers':
+        return (
+          <SlidersHorizontal
+            className={`h-5 w-5 shrink-0 transition-colors ${
+              isActive ? 'text-pink-400 scale-105' : 'text-pink-400/70'
             }`}
           />
         );

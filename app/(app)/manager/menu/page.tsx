@@ -4,16 +4,17 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createClient } from '@/lib/supabase/client';
-import { MenuItem, MenuCategory } from '@/types/database';
+import { MenuItem, MenuCategory, ModifierGroup } from '@/types/database';
 import { menuItemSchema, MenuItemInput } from '@/schemas/menu-item';
 import {
   createMenuItemAction,
   updateMenuItemAction,
   toggleMenuItemAvailabilityAction,
 } from '@/app/actions/menu';
+import { setMenuItemModifierGroupsAction } from '@/app/actions/modifiers';
+import { Checkbox } from '@/components/ui/checkbox';
 import { formatMoney } from '@/lib/format';
 import { toast } from 'sonner';
-
 import {
   Card,
   CardContent,
@@ -61,6 +62,8 @@ import { Plus, Coffee, Loader2, Edit3 } from 'lucide-react';
 export default function ManagerMenuPage() {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
@@ -99,9 +102,15 @@ export default function ManagerMenuPage() {
 
     const { data: itemsData } = await supabase
       .from('menu_items')
-      .select('*, category:menu_categories(*)')
+      .select('*, category:menu_categories(*), modifier_groups:menu_item_modifier_groups(group_id, sort_order)')
       .order('name');
     if (itemsData) setItems(itemsData as MenuItem[]);
+
+    const { data: mgData } = await supabase
+      .from('modifier_groups')
+      .select('*')
+      .order('name');
+    if (mgData) setModifierGroups(mgData as ModifierGroup[]);
     setLoading(false);
   };
 
@@ -163,7 +172,13 @@ export default function ManagerMenuPage() {
         return;
       }
 
-      toast.success(`Updated ${values.name}!`);
+      const modRes = await setMenuItemModifierGroupsAction(editingItem.id, selectedGroupIds);
+      if (modRes?.error) {
+        toast.error('Updated item, but modifier assignment failed', { description: modRes.error });
+      } else {
+        toast.success(`Updated ${values.name}!`);
+      }
+
       setEditingItem(null);
       loadMenu();
     } catch {
@@ -175,6 +190,7 @@ export default function ManagerMenuPage() {
 
   const openEditModal = (item: MenuItem) => {
     setEditingItem(item);
+    setSelectedGroupIds((item.modifier_groups || []).map((mg) => mg.group_id));
     editForm.reset({
       category_id: item.category_id,
       name: item.name,
@@ -354,6 +370,34 @@ export default function ManagerMenuPage() {
               formInstance={editForm}
               onSubmitHandler={onEditSubmit}
             />
+            {modifierGroups.length > 0 && (
+              <div className="border-t border-border pt-3 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Modifier Groups
+                </p>
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                  {modifierGroups.map((mg) => {
+                    const checked = selectedGroupIds.includes(mg.id);
+                    return (
+                      <label
+                        key={mg.id}
+                        className="flex items-center gap-2 rounded-lg border border-border p-2 text-xs cursor-pointer hover:bg-muted/30"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(val) => {
+                            setSelectedGroupIds((prev) =>
+                              val ? [...prev, mg.id] : prev.filter((id) => id !== mg.id)
+                            );
+                          }}
+                        />
+                        <span className="font-medium truncate">{mg.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       )}

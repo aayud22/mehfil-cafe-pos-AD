@@ -26,7 +26,7 @@ export default async function ReceiptPage({ params }: PageProps) {
       .single(),
     supabase
       .from('order_items')
-      .select(`id, quantity, unit_price, voided_at, menu_item:menu_items(name), order:orders(token_number, customer_name, order_type)`)
+      .select(`id, quantity, unit_price, voided_at, modifiers, menu_item:menu_items(name), order:orders(token_number, customer_name, order_type)`)
       .eq('bill_id', receiptId)
       .is('voided_at', null),
     supabase
@@ -84,22 +84,29 @@ export default async function ReceiptPage({ params }: PageProps) {
     }
   }
 
-  // 3. Merge identical items (same name and unit_price)
+  // 3. Merge identical items (same name, unit_price, and modifiers)
   interface MergedItem {
     name: string;
     unitPrice: number;
     quantity: number;
     lineTotal: number;
+    modifiersText: string;
   }
   const itemMap: Record<string, MergedItem> = {};
   items.forEach((item: any) => {
     const menuItemObj = Array.isArray(item.menu_item) ? item.menu_item[0] : item.menu_item;
     const name = menuItemObj?.name || 'Item';
     const unitPrice = Number(item.unit_price);
-    const key = `${name}__${unitPrice}`;
+    const mods: Array<{ group: string; option: string; price_delta: number }> = Array.isArray(
+      item.modifiers
+    )
+      ? item.modifiers
+      : [];
+    const modifiersText = mods.map((m) => m.option).join(', ');
+    const key = `${name}__${unitPrice}__${modifiersText}`;
 
     if (!itemMap[key]) {
-      itemMap[key] = { name, unitPrice, quantity: 0, lineTotal: 0 };
+      itemMap[key] = { name, unitPrice, quantity: 0, lineTotal: 0, modifiersText };
     }
     itemMap[key].quantity += item.quantity;
     itemMap[key].lineTotal += unitPrice * item.quantity;
@@ -219,6 +226,11 @@ export default async function ReceiptPage({ params }: PageProps) {
                 <span className="font-medium text-foreground print:text-black">
                   {item.name}
                 </span>
+                {item.modifiersText && (
+                  <span className="text-muted-foreground print:text-black text-[10px] block">
+                    {item.modifiersText}
+                  </span>
+                )}
                 <span className="text-muted-foreground print:text-black text-[11px] block">
                   {item.quantity} × {formatMoney(item.unitPrice)}
                 </span>

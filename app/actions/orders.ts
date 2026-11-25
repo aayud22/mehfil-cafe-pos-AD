@@ -19,6 +19,7 @@ export async function createOrderAction(input: OrderInput) {
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
       note: item.note || null,
+      modifier_option_ids: item.modifier_option_ids || [],
     })),
     p_order_type: parsed.data.order_type,
     p_customer_name: parsed.data.customer_name || null,

@@ -5,6 +5,7 @@ export const orderItemInputSchema = z.object({
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
   unit_price: z.coerce.number().min(0, "Price must be non-negative").optional(),
   note: z.string().trim().max(100, "Note must be 100 characters or less").optional(),
+  modifier_option_ids: z.array(z.string().uuid()).optional(),
 });
 
 export const orderSchema = z

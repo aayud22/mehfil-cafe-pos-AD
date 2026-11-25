@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { MenuItem, MenuCategory } from '@/types/database';
+import { MenuItem, MenuCategory, ModifierGroup, ModifierOption } from '@/types/database';
 import { orderSchema, OrderInput } from '@/schemas/order';
 import { createOrderAction } from '@/app/actions/orders';
 import { formatMoney } from '@/lib/format';
+import { ModifierDrawer } from '@/components/orders/ModifierDrawer';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -34,8 +35,11 @@ import {
 } from 'lucide-react';
 
 interface CartItem {
+  key: string;
   menuItem: MenuItem;
   quantity: number;
+  selectedOptions: ModifierOption[];
+  note?: string;
 }
 
 export default function NewOffPremiseOrderPage() {
@@ -55,6 +59,7 @@ export default function NewOffPremiseOrderPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modDrawerItem, setModDrawerItem] = useState<MenuItem | null>(null);
 
   useEffect(() => {
     async function loadMenu() {
@@ -63,7 +68,7 @@ export default function NewOffPremiseOrderPage() {
         supabase.from('menu_categories').select('*').order('sort_order', { ascending: true }),
         supabase
           .from('menu_items')
-          .select('*, category:menu_categories(*)')
+          .select('*, category:menu_categories(*), modifier_groups:menu_item_modifier_groups(sort_order, group:modifier_groups(*, options:modifier_options(*)))')
           .eq('is_available', true)
           .order('name', { ascending: true }),
       ]);
@@ -74,33 +79,70 @@ export default function NewOffPremiseOrderPage() {
     loadMenu();
   }, [supabase]);
 
-  const addToCart = (item: MenuItem) => {
+  const getSortedGroups = (item: MenuItem): ModifierGroup[] => {
+    const raw = item.modifier_groups || [];
+    return [...raw]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((m) => m.group)
+      .filter((g): g is ModifierGroup => Boolean(g));
+  };
+
+  const handleMenuItemTap = (item: MenuItem) => {
+    const groups = getSortedGroups(item);
+    if (groups.length > 0) {
+      setModDrawerItem(item);
+    } else {
+      addToCart(item, [], '');
+    }
+  };
+
+  const addToCart = (item: MenuItem, selectedOptions: ModifierOption[] = [], note = '') => {
+    const optIds = selectedOptions.map((o) => o.id).sort();
+    const cartKey = `${item.id}__${optIds.join(',')}__${note.trim()}`;
     setCart((prev) => {
-      const existing = prev[item.id];
+      const existing = prev[cartKey];
       return {
         ...prev,
-        [item.id]: { menuItem: item, quantity: existing ? existing.quantity + 1 : 1 },
+        [cartKey]: {
+          key: cartKey,
+          menuItem: item,
+          quantity: existing ? existing.quantity + 1 : 1,
+          selectedOptions,
+          note: note.trim() || undefined,
+        },
       };
     });
   };
 
-  const removeFromCart = (itemId: string) => {
+  const incrementCartKey = (cartKey: string) => {
     setCart((prev) => {
-      const existing = prev[itemId];
+      const existing = prev[cartKey];
+      if (!existing) return prev;
+      return { ...prev, [cartKey]: { ...existing, quantity: existing.quantity + 1 } };
+    });
+  };
+
+  const removeFromCart = (cartKey: string) => {
+    setCart((prev) => {
+      const existing = prev[cartKey];
       if (!existing) return prev;
       if (existing.quantity <= 1) {
         const copy = { ...prev };
-        delete copy[itemId];
+        delete copy[cartKey];
         return copy;
       }
-      return { ...prev, [itemId]: { ...existing, quantity: existing.quantity - 1 } };
+      return { ...prev, [cartKey]: { ...existing, quantity: existing.quantity - 1 } };
     });
   };
+
+  const getCartItemUnitPrice = (c: CartItem) =>
+    Number(c.menuItem.price) +
+    c.selectedOptions.reduce((sum, o) => sum + Number(o.price_delta), 0);
 
   const cartList = Object.values(cart);
   const cartCount = cartList.reduce((acc, c) => acc + c.quantity, 0);
   const cartTotal = cartList.reduce(
-    (acc, c) => acc + Number(c.menuItem.price) * c.quantity,
+    (acc, c) => acc + getCartItemUnitPrice(c) * c.quantity,
     0
   );
 
@@ -115,7 +157,9 @@ export default function NewOffPremiseOrderPage() {
       items: cartList.map((c) => ({
         menu_item_id: c.menuItem.id,
         quantity: c.quantity,
-        unit_price: Number(c.menuItem.price),
+        unit_price: getCartItemUnitPrice(c),
+        note: c.note || undefined,
+        modifier_option_ids: c.selectedOptions.map((o) => o.id),
       })),
     };
 
@@ -161,37 +205,48 @@ export default function NewOffPremiseOrderPage() {
         </p>
       ) : (
         <div className="space-y-2.5 max-h-[34vh] overflow-y-auto divide-y divide-border">
-          {cartList.map(({ menuItem, quantity }) => (
-            <div key={menuItem.id} className="flex items-center justify-between pt-2 text-xs">
-              <div>
-                <p className="font-semibold text-foreground">{menuItem.name}</p>
-                <p className="text-muted-foreground text-[11px]">
-                  {quantity} × {formatMoney(Number(menuItem.price))}
-                </p>
+          {cartList.map((entry) => {
+            const unitPrice = getCartItemUnitPrice(entry);
+            return (
+              <div key={entry.key} className="flex items-center justify-between pt-2 text-xs gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground">{entry.menuItem.name}</p>
+                  {entry.selectedOptions.length > 0 && (
+                    <p className="text-[11px] text-primary/90 leading-snug">
+                      {entry.selectedOptions.map((o) => o.name).join(', ')}
+                    </p>
+                  )}
+                  {entry.note && (
+                    <p className="text-[11px] text-amber-400">Note: {entry.note}</p>
+                  )}
+                  <p className="text-muted-foreground text-[11px]">
+                    {entry.quantity} × {formatMoney(unitPrice)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-bold text-foreground">
+                    {formatMoney(unitPrice * entry.quantity)}
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() => removeFromCart(entry.key)}
+                  >
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="default"
+                    className="h-8 w-8"
+                    onClick={() => incrementCartKey(entry.key)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-foreground">
-                  {formatMoney(Number(menuItem.price) * quantity)}
-                </span>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className="h-8 w-8"
-                  onClick={() => removeFromCart(menuItem.id)}
-                >
-                  <Minus className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="default"
-                  className="h-8 w-8"
-                  onClick={() => addToCart(menuItem)}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -304,24 +359,33 @@ export default function NewOffPremiseOrderPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {filteredItems.map((item) => {
-              const inCart = cart[item.id];
+              const qty = cartList
+                .filter((c) => c.menuItem.id === item.id)
+                .reduce((s, c) => s + c.quantity, 0);
+              const hasMods = getSortedGroups(item).length > 0;
+
               return (
                 <Card
                   key={item.id}
-                  onClick={() => addToCart(item)}
+                  onClick={() => handleMenuItemTap(item)}
                   className={`flex items-center justify-between p-4 cursor-pointer transition active:scale-[0.98] ${
-                    inCart ? 'border-primary/80 bg-primary/5' : 'hover:border-primary/40'
+                    qty > 0 ? 'border-primary/80 bg-primary/5' : 'hover:border-primary/40'
                   }`}
                 >
                   <div>
                     <h4 className="font-bold text-sm text-foreground">{item.name}</h4>
-                    <p className="text-xs font-semibold text-primary mt-0.5">
-                      {formatMoney(Number(item.price))}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-xs font-semibold text-primary">
+                        {formatMoney(Number(item.price))}
+                      </p>
+                      {hasMods && (
+                        <span className="text-[10px] text-muted-foreground">Customizable</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {inCart ? (
-                      <Badge className="h-8 px-3 text-xs font-bold">{inCart.quantity}×</Badge>
+                    {qty > 0 ? (
+                      <Badge className="h-8 px-3 text-xs font-bold">{qty}×</Badge>
                     ) : (
                       <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full">
                         <Plus className="h-4 w-4" />
@@ -371,6 +435,16 @@ export default function NewOffPremiseOrderPage() {
           </DrawerContent>
         </Drawer>
       </div>
+
+      <ModifierDrawer
+        open={Boolean(modDrawerItem)}
+        onOpenChange={(open) => !open && setModDrawerItem(null)}
+        menuItem={modDrawerItem}
+        groups={modDrawerItem ? getSortedGroups(modDrawerItem) : []}
+        onConfirm={(selectedOptions, note) => {
+          if (modDrawerItem) addToCart(modDrawerItem, selectedOptions, note);
+        }}
+      />
     </div>
   );
 }

@@ -216,13 +216,20 @@ export default function KitchenPage() {
                           key={item.id}
                           className="flex items-start justify-between text-sm py-1 border-b border-border/40 last:border-none"
                         >
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-xs font-bold text-primary">
+                        <div className="flex items-start gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-xs font-bold text-primary shrink-0">
                             {item.quantity}x
                           </span>
-                          <span className="font-semibold text-foreground">
-                            {item.menu_item?.name || 'Item'}
-                          </span>
+                          <div>
+                            <span className="font-semibold text-foreground block">
+                              {item.menu_item?.name || 'Item'}
+                            </span>
+                            {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
+                              <p className="text-xs font-bold text-primary/90 mt-0.5">
+                                {item.modifiers.map((m) => m.option).join(' · ')}
+                              </p>
+                            )}
+                          </div>
                         </div>
                         {item.note && (
                           <span className="text-xs text-muted-foreground italic">
