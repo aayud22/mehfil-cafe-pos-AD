@@ -5,7 +5,7 @@ import { MenuItem, ModifierGroup, ModifierOption } from '@/types/database';
 import { formatMoney } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { ItemNoteEditor } from '@/components/orders/ItemNoteEditor';
 import {
   Drawer,
   DrawerContent,
@@ -172,17 +172,8 @@ export function ModifierDrawer({
             );
           })}
 
-          <div className="space-y-1.5 pt-2 border-t border-border">
-            <label className="text-xs font-semibold text-muted-foreground">
-              Item Note (Optional, max 100 chars)
-            </label>
-            <Input
-              placeholder="e.g. Extra hot, No ice..."
-              maxLength={100}
-              value={itemNote}
-              onChange={(e) => setItemNote(e.target.value)}
-              className="h-11 text-sm"
-            />
+          <div className="pt-2 border-t border-border">
+            <ItemNoteEditor value={itemNote} onChange={setItemNote} />
           </div>
         </div>
 

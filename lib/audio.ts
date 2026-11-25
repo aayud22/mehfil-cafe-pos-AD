@@ -42,3 +42,42 @@ export function playReadyChime() {
     console.warn('Audio chime could not play:', err);
   }
 }
+
+/**
+ * Synthesizes a crisp, unmistakable two-pulse alert beep for new KDS tickets
+ * using the Web Audio API. Requires zero external audio files.
+ */
+export function playNewTicketBeep() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    const now = ctx.currentTime;
+
+    const pulses = [
+      { start: 0, freq: 880, duration: 0.14 },
+      { start: 0.18, freq: 1046.5, duration: 0.22 },
+    ];
+
+    pulses.forEach(({ start, freq, duration }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + start);
+      gain.gain.setValueAtTime(0.25, now + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + duration);
+    });
+  } catch (err) {
+    console.warn('New ticket beep could not play:', err);
+  }
+}

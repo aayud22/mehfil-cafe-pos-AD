@@ -1,22 +1,53 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeOrders } from '@/hooks/useRealtimeOrders';
 import { updateOrderStatusAction } from '@/app/actions/orders';
 import { formatTime } from '@/lib/format';
+import { playNewTicketBeep } from '@/lib/audio';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChefHat, Clock, CheckCircle2, Flame, Utensils, Loader2 } from 'lucide-react';
+import { ChefHat, Clock, CheckCircle2, Flame, Utensils, Loader2, Volume2, VolumeX } from 'lucide-react';
 import { OrderStatus } from '@/types/database';
 import { getOrderDisplayLabel } from '@/lib/order-label';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { toast } from 'sonner';
 
+const KDS_SOUND_STORAGE_KEY = 'mehfil_kds_sound_enabled';
+
 export default function KitchenPage() {
   const { orders, subscriptionStatus } = useRealtimeOrders();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const seenOrderIdsRef = useRef<Set<string> | null>(null);
   const { t } = useLanguage();
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(KDS_SOUND_STORAGE_KEY);
+      if (saved === 'false') {
+        setSoundEnabled(false);
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }, []);
+
+  const toggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(KDS_SOUND_STORAGE_KEY, String(next));
+      } catch {
+        // Ignore storage access errors
+      }
+      if (next) {
+        playNewTicketBeep();
+      }
+      return next;
+    });
+  };
 
   // Group all table orders by created_at ascending to calculate Round N
   const tableOrderPositions = useMemo(() => {
@@ -51,6 +82,30 @@ export default function KitchenPage() {
       .filter((o) => o.status === 'new' || o.status === 'preparing' || o.status === 'ready')
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   }, [orders]);
+
+  // Update browser tab title with open ticket count
+  useEffect(() => {
+    const count = openKitchenOrders.length;
+    document.title = count > 0 ? `(${count}) Kitchen | Mehfil Cafe` : 'Kitchen | Mehfil Cafe';
+  }, [openKitchenOrders.length]);
+
+  // Play a beep when a brand-new ticket arrives after initial load
+  useEffect(() => {
+    const currentIds = new Set(openKitchenOrders.map((o) => o.id));
+    if (seenOrderIdsRef.current === null) {
+      seenOrderIdsRef.current = currentIds;
+      return;
+    }
+
+    const hasBrandNewTicket = openKitchenOrders.some(
+      (o) => o.status === 'new' && !seenOrderIdsRef.current?.has(o.id)
+    );
+    seenOrderIdsRef.current = currentIds;
+
+    if (hasBrandNewTicket && soundEnabled) {
+      playNewTicketBeep();
+    }
+  }, [openKitchenOrders, soundEnabled]);
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
     setUpdatingId(orderId);
@@ -112,25 +167,42 @@ export default function KitchenPage() {
           </div>
         </div>
 
-        {/* Realtime Subscription Status Indicator */}
-        <div className="flex items-center gap-2">
-          <span className="flex h-3 w-3 relative">
-            {isSubscribed && (
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            )}
-            <span
-              className={`relative inline-flex rounded-full h-3 w-3 ${
-                isSubscribed ? 'bg-emerald-500' : 'bg-red-500'
-              }`}
-            ></span>
-          </span>
-          <span
-            className={`text-xs font-bold uppercase tracking-wider ${
-              isSubscribed ? 'text-emerald-400' : 'text-red-400'
-            }`}
+        {/* Sound Toggle & Realtime Subscription Status Indicator */}
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant={soundEnabled ? 'secondary' : 'outline'}
+            onClick={toggleSound}
+            className="h-11 gap-2 px-3 text-xs font-bold"
+            aria-label={soundEnabled ? 'Mute new ticket sound' : 'Enable new ticket sound'}
           >
-            {isSubscribed ? t('kds_live') : t('kds_connecting')}
-          </span>
+            {soundEnabled ? (
+              <Volume2 className="h-4 w-4 text-emerald-400" />
+            ) : (
+              <VolumeX className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span>{soundEnabled ? 'Sound On' : 'Sound Off'}</span>
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <span className="flex h-3 w-3 relative">
+              {isSubscribed && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              )}
+              <span
+                className={`relative inline-flex rounded-full h-3 w-3 ${
+                  isSubscribed ? 'bg-emerald-500' : 'bg-red-500'
+                }`}
+              ></span>
+            </span>
+            <span
+              className={`text-xs font-bold uppercase tracking-wider ${
+                isSubscribed ? 'text-emerald-400' : 'text-red-400'
+              }`}
+            >
+              {isSubscribed ? t('kds_live') : t('kds_connecting')}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -202,42 +274,43 @@ export default function KitchenPage() {
                   </div>
 
                   {order.note && (
-                    <div className="mt-2.5 rounded-lg border border-primary/40 bg-primary/10 p-2 text-xs text-foreground">
-                      <span className="font-semibold text-primary">Note:</span> {order.note}
+                    <div className="mt-2.5 rounded-lg border border-amber-500/60 bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-200 whitespace-normal break-words">
+                      <span className="uppercase tracking-wide text-amber-400">Order Note:</span>{' '}
+                      {order.note}
                     </div>
                   )}
 
                   {/* Items list (excluding voided items) */}
-                  <div className="mt-4 space-y-2">
+                  <div className="mt-4 space-y-2.5">
                     {order.order_items
                       ?.filter((item) => !item.voided_at)
                       .map((item) => (
                         <div
                           key={item.id}
-                          className="flex items-start justify-between text-sm py-1 border-b border-border/40 last:border-none"
+                          className="text-sm py-1.5 border-b border-border/40 last:border-none"
                         >
-                        <div className="flex items-start gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-xs font-bold text-primary shrink-0">
-                            {item.quantity}x
-                          </span>
-                          <div>
-                            <span className="font-semibold text-foreground block">
-                              {item.menu_item?.name || 'Item'}
+                          <div className="flex items-start gap-2">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-xs font-bold text-primary shrink-0">
+                              {item.quantity}x
                             </span>
-                            {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
-                              <p className="text-xs font-bold text-primary/90 mt-0.5">
-                                {item.modifiers.map((m) => m.option).join(' · ')}
-                              </p>
-                            )}
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-foreground block">
+                                {item.menu_item?.name || 'Item'}
+                              </span>
+                              {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
+                                <p className="text-xs font-bold text-primary/90 mt-0.5 whitespace-normal break-words">
+                                  {item.modifiers.map((m) => m.option).join(' · ')}
+                                </p>
+                              )}
+                              {item.note && (
+                                <div className="mt-1.5 rounded-md border border-amber-500/60 bg-amber-500/15 px-2.5 py-1.5 text-xs font-bold text-amber-300 whitespace-normal break-words">
+                                  Note: {item.note}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        {item.note && (
-                          <span className="text-xs text-muted-foreground italic">
-                            {item.note}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
 

@@ -12,6 +12,7 @@ import { formatMoney, formatTime } from '@/lib/format';
 import { getTableState, TABLE_STATE_META } from '@/lib/table-state';
 import { CancelReasonDialog } from '@/components/orders/CancelReasonDialog';
 import { ModifierDrawer } from '@/components/orders/ModifierDrawer';
+import { ItemNoteEditor } from '@/components/orders/ItemNoteEditor';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -235,6 +236,16 @@ export default function WaiterOrderPage({
     });
   };
 
+  const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
+
+  const updateCartItemNote = (cartKey: string, nextNote: string) => {
+    setCart((prev) => {
+      const existing = prev[cartKey];
+      if (!existing) return prev;
+      return { ...prev, [cartKey]: { ...existing, note: nextNote || undefined } };
+    });
+  };
+
   const removeFromCart = (cartKey: string) => {
     setCart((prev) => {
       const existing = prev[cartKey];
@@ -430,46 +441,71 @@ export default function WaiterOrderPage({
         <div className="space-y-2.5 max-h-[38vh] overflow-y-auto divide-y divide-border">
           {cartList.map((cartEntry) => {
             const unitPrice = getCartItemUnitPrice(cartEntry);
+            const isEditingNote = editingNoteKey === cartEntry.key;
             return (
-              <div
-                key={cartEntry.key}
-                className="flex items-center justify-between pt-2 text-xs gap-2"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground">{cartEntry.menuItem.name}</p>
-                  {cartEntry.selectedOptions.length > 0 && (
-                    <p className="text-[11px] text-primary/90 leading-snug">
-                      {cartEntry.selectedOptions.map((o) => o.name).join(', ')}
-                    </p>
-                  )}
-                  {cartEntry.note && (
-                    <p className="text-[11px] text-amber-400">Note: {cartEntry.note}</p>
-                  )}
-                  <p className="text-muted-foreground text-[11px]">
-                    {cartEntry.quantity} × {formatMoney(unitPrice)}
-                  </p>
+              <div key={cartEntry.key} className="pt-2 text-xs space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{cartEntry.menuItem.name}</p>
+                    {cartEntry.selectedOptions.length > 0 && (
+                      <p className="text-[11px] text-primary/90 leading-snug">
+                        {cartEntry.selectedOptions.map((o) => o.name).join(', ')}
+                      </p>
+                    )}
+                    {cartEntry.note && (
+                      <p className="text-[11px] font-semibold text-amber-400">
+                        Note: {cartEntry.note}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-muted-foreground text-[11px]">
+                        {cartEntry.quantity} × {formatMoney(unitPrice)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingNoteKey(isEditingNote ? null : cartEntry.key)
+                        }
+                        className="text-[11px] font-semibold text-amber-400 hover:underline min-h-[28px] px-1"
+                      >
+                        {isEditingNote
+                          ? 'Done'
+                          : cartEntry.note
+                          ? 'Edit note'
+                          : '+ Note'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-bold text-foreground">
+                      {formatMoney(unitPrice * cartEntry.quantity)}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      onClick={() => removeFromCart(cartEntry.key)}
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="default"
+                      className="h-8 w-8"
+                      onClick={() => incrementCartKey(cartEntry.key)}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-bold text-foreground">
-                    {formatMoney(unitPrice * cartEntry.quantity)}
-                  </span>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    className="h-8 w-8"
-                    onClick={() => removeFromCart(cartEntry.key)}
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="default"
-                    className="h-8 w-8"
-                    onClick={() => incrementCartKey(cartEntry.key)}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
+                {isEditingNote && (
+                  <div className="rounded-lg border border-border bg-muted/20 p-2.5">
+                    <ItemNoteEditor
+                      value={cartEntry.note || ''}
+                      onChange={(nextNote) => updateCartItemNote(cartEntry.key, nextNote)}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
