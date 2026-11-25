@@ -6,6 +6,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, LoginInput } from '@/schemas/login';
 import { loginAction } from '@/app/actions/auth';
+import { useLanguage } from '@/components/providers/LanguageProvider';
+import { LanguageToggle } from '@/components/navigation/LanguageToggle';
 import { toast } from 'sonner';
 
 import {
@@ -30,6 +32,7 @@ import { Coffee, ShieldCheck, ChefHat, Receipt, Smartphone, Loader2 } from 'luci
 export default function LoginPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useLanguage();
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -66,16 +69,19 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-dvh w-full items-center justify-center p-4 bg-gradient-to-br from-background via-card to-background">
-      <Card className="w-full max-w-md border-border/80 shadow-2xl backdrop-blur">
+      <Card className="relative w-full max-w-md border-border/80 shadow-2xl backdrop-blur">
+        <div className="absolute right-4 top-4">
+          <LanguageToggle compact />
+        </div>
         <CardHeader className="text-center pb-4">
           <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 text-primary ring-1 ring-primary/30">
             <Coffee className="h-8 w-8" />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
-            Mehfil Cafe
+            {t('app_name')}
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm text-muted-foreground">
-            Point-of-Sale & Operations Management System
+            {t('app_subtitle')}
           </CardDescription>
         </CardHeader>
 
@@ -134,10 +140,10 @@ export default function LoginPage() {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Authenticating...
+                    {t('authenticating')}
                   </>
                 ) : (
-                  'Sign In to Mehfil POS'
+                  t('sign_in_btn')
                 )}
               </Button>
             </form>
@@ -145,7 +151,7 @@ export default function LoginPage() {
 
           <div className="border-t border-border pt-4">
             <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Demo Logins (Click to autofill)
+              {t('demo_logins')}
             </p>
             <div className="grid grid-cols-2 gap-2">
               <Button

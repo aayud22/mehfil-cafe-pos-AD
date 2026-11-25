@@ -9,11 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChefHat, Clock, CheckCircle2, Flame, Utensils, Loader2 } from 'lucide-react';
 import { OrderStatus } from '@/types/database';
+import { useLanguage } from '@/components/providers/LanguageProvider';
 import { toast } from 'sonner';
 
 export default function KitchenPage() {
   const { orders, subscriptionStatus } = useRealtimeOrders();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   // Group all table orders by created_at ascending to calculate Round N
   const tableOrderPositions = useMemo(() => {
@@ -68,19 +70,19 @@ export default function KitchenPage() {
       case 'new':
         return (
           <Badge variant="warning" className="animate-pulse text-xs font-bold">
-            New Ticket
+            {t('kds_status_new')}
           </Badge>
         );
       case 'preparing':
         return (
           <Badge variant="info" className="text-xs font-bold">
-            Preparing
+            {t('kds_status_preparing')}
           </Badge>
         );
       case 'ready':
         return (
           <Badge variant="success" className="text-xs font-bold">
-            Ready
+            {t('kds_status_ready')}
           </Badge>
         );
       default:
@@ -100,10 +102,10 @@ export default function KitchenPage() {
           </div>
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground">
-              Kitchen Display System (KDS)
+              {t('kds_title')}
             </h1>
             <p className="text-xs md:text-sm text-muted-foreground">
-              Open orders, updating live
+              {t('kds_subtitle')}
             </p>
           </div>
         </div>
@@ -125,7 +127,7 @@ export default function KitchenPage() {
               isSubscribed ? 'text-emerald-400' : 'text-red-400'
             }`}
           >
-            {isSubscribed ? 'Realtime Connected' : 'Reconnecting'}
+            {isSubscribed ? t('kds_live') : t('kds_connecting')}
           </span>
         </div>
       </div>
@@ -135,10 +137,10 @@ export default function KitchenPage() {
         <Card className="flex flex-col items-center justify-center border-dashed py-16 text-center">
           <Utensils className="h-12 w-12 text-muted-foreground/60" />
           <h3 className="mt-4 text-base font-semibold text-foreground">
-            Kitchen queue is empty
+            {t('kds_all_caught_up')}
           </h3>
           <p className="mt-1 text-xs md:text-sm text-muted-foreground">
-            New orders dispatched by waiters will appear here automatically.
+            {t('kds_no_pending')}
           </p>
         </Card>
       ) : (
@@ -227,7 +229,7 @@ export default function KitchenPage() {
                       ) : (
                         <Flame className="h-4 w-4" />
                       )}
-                      <span>Start Cooking</span>
+                      <span>{t('kds_start_preparing')}</span>
                     </Button>
                   )}
 
@@ -242,7 +244,7 @@ export default function KitchenPage() {
                       ) : (
                         <CheckCircle2 className="h-4 w-4" />
                       )}
-                      <span>Mark Ready for Pickup</span>
+                      <span>{t('kds_mark_ready')}</span>
                     </Button>
                   )}
 

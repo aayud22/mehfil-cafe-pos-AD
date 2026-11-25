@@ -81,3 +81,19 @@ INSERT INTO public.inventory_items (name, category, current_stock, unit, min_thr
 INSERT INTO public.vendor_invoices (vendor_id, invoice_number, invoice_date, total_amount, paid_amount, status, notes) VALUES
   ('ea111111-1111-1111-1111-111111111111', 'INV-9021', CURRENT_DATE, 4500.00, 2500.00, 'partial', 'Daily dairy delivery batch'),
   ('ea111111-1111-1111-1111-111111111112', 'INV-4412', CURRENT_DATE, 8400.00, 8400.00, 'paid', '6kg Arabica beans consignment');
+
+-- 8. Version 3: Sample Staff Roster (Valid Hex UUIDs)
+INSERT INTO public.staff_members (id, full_name, role_title, phone, monthly_salary, shift_type, joined_date, is_active) VALUES
+  ('fb111111-1111-1111-1111-111111111111', 'Aarav Sharma', 'Barista', '+91 98765 11101', 18000.00, 'morning', CURRENT_DATE - INTERVAL '90 days', true),
+  ('fb111111-1111-1111-1111-111111111112', 'Vikram Rathod', 'Head Chef', '+91 98765 11102', 26000.00, 'full_day', CURRENT_DATE - INTERVAL '180 days', true),
+  ('fb111111-1111-1111-1111-111111111113', 'Rohan Verma', 'Floor Waiter', '+91 98765 11103', 13500.00, 'evening', CURRENT_DATE - INTERVAL '60 days', true),
+  ('fb111111-1111-1111-1111-111111111114', 'Priya Nair', 'Cashier', '+91 98765 11104', 16000.00, 'full_day', CURRENT_DATE - INTERVAL '120 days', true),
+  ('fb111111-1111-1111-1111-111111111115', 'Suresh Yadav', 'Helper / Cleaner', '+91 98765 11105', 11000.00, 'morning', CURRENT_DATE - INTERVAL '45 days', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 9. Version 3: Sample Today's Attendance
+INSERT INTO public.staff_attendance (staff_id, attendance_date, status, shift, clock_in) VALUES
+  ('fb111111-1111-1111-1111-111111111111', (now() AT TIME ZONE 'Asia/Kolkata')::date, 'present', 'morning', now() - INTERVAL '3 hours'),
+  ('fb111111-1111-1111-1111-111111111112', (now() AT TIME ZONE 'Asia/Kolkata')::date, 'present', 'full_day', now() - INTERVAL '2 hours'),
+  ('fb111111-1111-1111-1111-111111111114', (now() AT TIME ZONE 'Asia/Kolkata')::date, 'present', 'full_day', now() - INTERVAL '2 hours')
+ON CONFLICT (staff_id, attendance_date) DO NOTHING;

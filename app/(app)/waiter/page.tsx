@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { CafeTable } from '@/types/database';
+import { useLanguage } from '@/components/providers/LanguageProvider';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ export default function WaiterFloorPage() {
   const [readyTableIds, setReadyTableIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+  const { t } = useLanguage();
 
   const loadData = useCallback(async () => {
     // 1. Fetch tables
@@ -67,21 +69,21 @@ export default function WaiterFloorPage() {
     <div className="space-y-6">
       <div className="border-b border-border pb-4">
         <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
-          <span>Floor Tables (Waiter POS)</span>
+          <span>{t('waiter_floor_title')}</span>
           {readyTableIds.size > 0 && (
             <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs px-2.5 py-0.5 animate-pulse gap-1">
               <Bell className="h-3 w-3" />
-              <span>{readyTableIds.size} Ready for Pickup</span>
+              <span>{readyTableIds.size} {t('ready_pickup')}</span>
             </Badge>
           )}
         </h1>
         <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-          Tap a table to take a mobile customer order, or deliver prepared food
+          {t('waiter_floor_subtitle')}
         </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading tables layout...</p>
+        <p className="text-sm text-muted-foreground">{t('loading_tables')}</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {tables.map((table) => {
@@ -104,21 +106,21 @@ export default function WaiterFloorPage() {
                     {isReady ? (
                       <Badge className="bg-emerald-500 text-white text-[10px] uppercase font-bold animate-pulse gap-1 px-1.5 py-0.5">
                         <Bell className="h-3 w-3" />
-                        Ready!
+                        {t('ready_badge')}
                       </Badge>
                     ) : (
                       <Badge
                         variant={table.status === 'occupied' ? 'warning' : 'success'}
                         className="text-[10px] uppercase font-bold"
                       >
-                        {table.status}
+                        {table.status === 'occupied' ? t('occupied') : t('free')}
                       </Badge>
                     )}
                   </div>
 
                   <div className="my-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Users className="h-4 w-4" />
-                    <span>{table.seats} Seats</span>
+                    <span>{table.seats} {t('seats')}</span>
                   </div>
 
                   <Button
@@ -131,12 +133,12 @@ export default function WaiterFloorPage() {
                       {isReady ? (
                         <>
                           <CheckCircle2 className="h-4 w-4" />
-                          Deliver Order
+                          {t('deliver_order')}
                         </>
                       ) : (
                         <>
                           <Utensils className="h-4 w-4" />
-                          Take Order
+                          {t('take_order')}
                         </>
                       )}
                     </span>

@@ -182,3 +182,70 @@ export interface InventoryLog {
   created_by: string | null;
   created_at: string;
 }
+
+export type ShiftType = 'morning' | 'evening' | 'full_day';
+export type AttendanceStatus = 'present' | 'half_day' | 'absent' | 'leave';
+
+export interface StaffMember {
+  id: string;
+  profile_id: string | null;
+  full_name: string;
+  role_title: string;
+  phone: string | null;
+  monthly_salary: number;
+  shift_type: ShiftType;
+  joined_date: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface StaffAttendance {
+  id: string;
+  staff_id: string;
+  attendance_date: string;
+  status: AttendanceStatus;
+  shift: ShiftType;
+  clock_in: string | null;
+  clock_out: string | null;
+  notes: string | null;
+  marked_by: string | null;
+  created_at: string;
+}
+
+export interface StaffSalaryPayment {
+  id: string;
+  staff_id: string;
+  payment_month: string;
+  amount: number;
+  payment_type: 'salary' | 'advance' | 'bonus';
+  mode: 'cash' | 'upi' | 'bank_transfer';
+  paid_at: string;
+  notes: string | null;
+  created_by: string | null;
+}
+
+export interface MonthlyDailyBreakdown {
+  date: string;
+  label: string;
+  day: number;
+  sales: number;
+  expenses: number;
+}
+
+export interface MonthlyBusinessReport {
+  month: string;
+  start_date: string;
+  end_date: string;
+  total_sales: number;
+  cash_sales: number;
+  upi_sales: number;
+  card_sales: number;
+  orders_count: number;
+  cancelled_count: number;
+  operating_expenses: number;
+  salary_expenses: number;
+  total_expenses: number;
+  net_profit: number;
+  vendor_dues_pending: number;
+  daily_breakdown: MonthlyDailyBreakdown[];
+}

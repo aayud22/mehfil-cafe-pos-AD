@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { CafeTable, Order } from '@/types/database';
 import { formatMoney } from '@/lib/format';
+import { useLanguage } from '@/components/providers/LanguageProvider';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,7 @@ export default function CashierPage() {
   const [tableData, setTableData] = useState<TableBillingData[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+  const { t } = useLanguage();
 
   useEffect(() => {
     async function loadOccupiedTables() {
@@ -112,10 +114,10 @@ export default function CashierPage() {
     <div className="space-y-6">
       <div className="border-b border-border pb-4">
         <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground">
-          Cashier & POS Checkout
+          {t('cashier_title')}
         </h1>
         <p className="text-xs md:text-sm text-muted-foreground">
-          Occupied dining tables with active customer rounds
+          {t('cashier_subtitle')}
         </p>
       </div>
 
@@ -125,10 +127,10 @@ export default function CashierPage() {
         <Card className="flex flex-col items-center justify-center border-dashed py-16 text-center">
           <CheckCircle className="h-12 w-12 text-emerald-500" />
           <h3 className="mt-4 text-base font-semibold text-foreground">
-            All tables are settled
+            {t('cashier_settled_title')}
           </h3>
           <p className="mt-1 text-xs md:text-sm text-muted-foreground">
-            No occupied tables pending payment right now.
+            {t('cashier_settled_desc')}
           </p>
         </Card>
       ) : (

@@ -3,14 +3,18 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { NavItem } from '@/lib/auth/roles';
+import { useLanguage } from '@/components/providers/LanguageProvider';
+import { TranslationKey } from '@/lib/i18n/translations';
 import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
+  FileBarChart,
   UtensilsCrossed,
   Grid,
   Wallet,
   Package,
   Truck,
+  Users,
   ChefHat,
   Receipt,
   History,
@@ -23,6 +27,13 @@ interface SidebarNavProps {
 
 export function SidebarNav({ items, onItemClick }: SidebarNavProps) {
   const pathname = usePathname();
+  const { t } = useLanguage();
+
+  const getTranslatedLabel = (iconName: NavItem['iconName'], fallback: string) => {
+    const key = `nav_${iconName}` as TranslationKey;
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  };
 
   const isItemActive = (href: string) => {
     if (href === '/owner') {
@@ -38,6 +49,14 @@ export function SidebarNav({ items, onItemClick }: SidebarNavProps) {
           <LayoutDashboard
             className={`h-5 w-5 shrink-0 transition-colors ${
               isActive ? 'text-amber-500 scale-105' : 'text-amber-500/70'
+            }`}
+          />
+        );
+      case 'reports':
+        return (
+          <FileBarChart
+            className={`h-5 w-5 shrink-0 transition-colors ${
+              isActive ? 'text-violet-400 scale-105' : 'text-violet-400/70'
             }`}
           />
         );
@@ -78,6 +97,14 @@ export function SidebarNav({ items, onItemClick }: SidebarNavProps) {
           <Truck
             className={`h-5 w-5 shrink-0 transition-colors ${
               isActive ? 'text-orange-400 scale-105' : 'text-orange-400/70'
+            }`}
+          />
+        );
+      case 'staff':
+        return (
+          <Users
+            className={`h-5 w-5 shrink-0 transition-colors ${
+              isActive ? 'text-sky-400 scale-105' : 'text-sky-400/70'
             }`}
           />
         );
@@ -131,7 +158,7 @@ export function SidebarNav({ items, onItemClick }: SidebarNavProps) {
               }`}
             >
               {renderIcon(item.iconName, active)}
-              <span>{item.label}</span>
+              <span>{getTranslatedLabel(item.iconName, item.label)}</span>
             </Button>
           </Link>
         );

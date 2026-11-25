@@ -1,0 +1,154 @@
+export type Language = 'en' | 'hi';
+
+export const translations = {
+  en: {
+    // Brand & Auth
+    app_name: 'Mehfil Cafe',
+    app_subtitle: 'Point-of-Sale & Operations Management System',
+    logged_in_as: 'Logged in as',
+    sign_out: 'Sign Out',
+    sign_in_btn: 'Sign In to Mehfil POS',
+    authenticating: 'Authenticating...',
+    email_label: 'Email Address',
+    password_label: 'Password',
+    demo_logins: 'Demo Logins (Click to autofill)',
+
+    // Roles
+    role_owner: 'Cafe Owner',
+    role_manager: 'Branch Manager',
+    role_cashier: 'Cashier / POS',
+    role_kitchen: 'Kitchen Display (KDS)',
+    role_waiter: 'Floor Waiter',
+
+    // Navigation
+    nav_dashboard: 'Owner Dashboard',
+    nav_reports: 'Monthly Report',
+    nav_menu: 'Menu Catalog',
+    nav_tables: 'Tables Layout',
+    nav_expenses: 'Daily Expenses',
+    nav_stock: 'Stock & Inventory',
+    nav_vendors: 'Vendor Dues',
+    nav_staff: 'Staff & Payroll',
+    nav_waiter: 'Floor POS',
+    nav_kitchen: 'Kitchen Display (KDS)',
+    nav_cashier: 'Cashier Billing',
+    nav_history: 'Bill History',
+
+    // Waiter Floor & Order
+    waiter_floor_title: 'Floor Tables (Waiter POS)',
+    waiter_floor_subtitle: 'Tap a table to take a mobile customer order, or deliver prepared food',
+    loading_tables: 'Loading tables layout...',
+    seats: 'Seats',
+    take_order: 'Take Order',
+    deliver_order: 'Deliver Order',
+    ready_pickup: 'Ready for Pickup',
+    ready_badge: 'Ready!',
+    free: 'free',
+    occupied: 'occupied',
+    mark_served: 'Mark Served',
+    add_more_items: 'Add More Items (New Round)',
+    send_order: 'Send Order',
+    send_round: 'Send Round',
+    running_total: 'Running Session Total',
+
+    // Kitchen KDS
+    kds_title: 'Kitchen Display System',
+    kds_subtitle: 'Live prep tickets sorted chronologically. Auto-synced.',
+    kds_live: 'Live Synced',
+    kds_connecting: 'Connecting...',
+    kds_all_caught_up: 'All caught up!',
+    kds_no_pending: 'No pending food or beverage tickets right now.',
+    kds_start_preparing: 'Start Preparing',
+    kds_mark_ready: 'Ready for Pickup',
+    kds_status_new: 'New Ticket',
+    kds_status_preparing: 'Preparing',
+    kds_status_ready: 'Ready for Pickup',
+
+    // Cashier
+    cashier_title: 'Cashier & POS Checkout',
+    cashier_subtitle: 'Occupied dining tables with active customer rounds',
+    cashier_settled_title: 'All tables are settled',
+    cashier_settled_desc: 'No occupied tables pending payment right now.',
+    cashier_total_payable: 'Total Payable:',
+    cashier_incl_gst: 'Incl. 5% GST (CGST + SGST)',
+    cashier_proceed_bill: 'Proceed to Bill',
+    cashier_preparing: 'Kitchen Preparing',
+    cashier_ready_bill: 'Ready to Bill',
+  },
+  hi: {
+    // Brand & Auth
+    app_name: 'महफिल कैफे',
+    app_subtitle: 'पीओएस और कैफे संचालन प्रणाली',
+    logged_in_as: 'लॉग इन उपयोगकर्ता',
+    sign_out: 'साइन आउट',
+    sign_in_btn: 'महफिल पीओएस में साइन इन करें',
+    authenticating: 'लॉग इन हो रहा है...',
+    email_label: 'ईमेल पता',
+    password_label: 'पासवर्ड',
+    demo_logins: 'डेमो लॉगिन (ऑटोफिल के लिए क्लिक करें)',
+
+    // Roles
+    role_owner: 'कैफे मालिक',
+    role_manager: 'ब्रांच मैनेजर',
+    role_cashier: 'कैशियर / पीओएस',
+    role_kitchen: 'किचन डिस्प्ले (KDS)',
+    role_waiter: 'फ्लोर वेटर',
+
+    // Navigation
+    nav_dashboard: 'मालिक डैशबोर्ड',
+    nav_reports: 'मासिक रिपोर्ट',
+    nav_menu: 'मेनू कैटलॉग',
+    nav_tables: 'टेबल लेआउट',
+    nav_expenses: 'दैनिक खर्च',
+    nav_stock: 'स्टॉक और इन्वेंटरी',
+    nav_vendors: 'वेंडर बकाया',
+    nav_staff: 'स्टाफ और वेतन',
+    nav_waiter: 'फ्लोर पीओएस',
+    nav_kitchen: 'किचन डिस्प्ले (KDS)',
+    nav_cashier: 'कैशियर बिलिंग',
+    nav_history: 'बिल इतिहास',
+
+    // Waiter Floor & Order
+    waiter_floor_title: 'फ्लोर टेबल्स (वेटर पीओएस)',
+    waiter_floor_subtitle: 'ऑर्डर लेने या तैयार खाना परोसने के लिए टेबल पर टैप करें',
+    loading_tables: 'टेबल लेआउट लोड हो रहा है...',
+    seats: 'सीटें',
+    take_order: 'ऑर्डर लें',
+    deliver_order: 'ऑर्डर परोसें',
+    ready_pickup: 'परोसने के लिए तैयार',
+    ready_badge: 'तैयार!',
+    free: 'खाली',
+    occupied: 'व्यस्त',
+    mark_served: 'परोसा गया',
+    add_more_items: 'और आइटम जोड़ें (नया राउंड)',
+    send_order: 'ऑर्डर भेजें',
+    send_round: 'राउंड भेजें',
+    running_total: 'कुल चालू बिल',
+
+    // Kitchen KDS
+    kds_title: 'किचन डिस्प्ले सिस्टम',
+    kds_subtitle: 'लाइव ऑर्डर टिकट (समय के अनुसार)। ऑटो-सिंक।',
+    kds_live: 'लाइव जुड़ा हुआ',
+    kds_connecting: 'जुड़ रहा है...',
+    kds_all_caught_up: 'सभी ऑर्डर पूरे!',
+    kds_no_pending: 'अभी कोई लंबित खाना या पेय ऑर्डर नहीं है।',
+    kds_start_preparing: 'बनाना शुरू करें',
+    kds_mark_ready: 'पिकअप के लिए तैयार',
+    kds_status_new: 'नया टिकट',
+    kds_status_preparing: 'बन रहा है',
+    kds_status_ready: 'पिकअप तैयार',
+
+    // Cashier
+    cashier_title: 'कैशियर और पीओएस चेकआउट',
+    cashier_subtitle: 'सक्रिय ग्राहक राउंड वाली व्यस्त टेबल्स',
+    cashier_settled_title: 'सभी टेबल्स का भुगतान हो गया',
+    cashier_settled_desc: 'अभी भुगतान के लिए कोई टेबल लंबित नहीं है।',
+    cashier_total_payable: 'कुल देय राशि:',
+    cashier_incl_gst: '5% जीएसटी सहित (CGST + SGST)',
+    cashier_proceed_bill: 'बिल पर जाएं',
+    cashier_preparing: 'किचन में बन रहा है',
+    cashier_ready_bill: 'बिल के लिए तैयार',
+  },
+} as const;
+
+export type TranslationKey = keyof typeof translations.en;

@@ -10,6 +10,7 @@ import {
 import { signOutAction } from '@/app/actions/auth';
 import { SidebarNav } from '@/components/navigation/SidebarNav';
 import { MobileBottomNav } from '@/components/navigation/MobileBottomNav';
+import { LanguageToggle } from '@/components/navigation/LanguageToggle';
 import { WaiterNotificationListener } from '@/components/notifications/WaiterNotificationListener';
 import {
   Coffee,
@@ -73,17 +74,20 @@ export default async function AppLayout({
             </div>
           </div>
 
-          <form action={signOutAction}>
-            <Button
-              type="submit"
-              variant="ghost"
-              size="sm"
-              className="h-9 px-2.5 text-xs text-destructive hover:bg-destructive/10"
-            >
-              <LogOut className="h-4 w-4 mr-1" />
-              <span>Sign Out</span>
-            </Button>
-          </form>
+          <div className="flex items-center gap-2">
+            <LanguageToggle compact />
+            <form action={signOutAction}>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="h-9 px-2.5 text-xs text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="h-4 w-4 mr-1" />
+                <span>Sign Out</span>
+              </Button>
+            </form>
+          </div>
         </header>
       ) : (
         <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur md:hidden print:hidden">
@@ -99,7 +103,9 @@ export default async function AppLayout({
             </div>
           </Link>
 
-          <Sheet>
+          <div className="flex items-center gap-2">
+            <LanguageToggle compact />
+            <Sheet>
             <SheetTrigger asChild>
               <Button
                 variant="outline"
@@ -133,7 +139,8 @@ export default async function AppLayout({
                 <SidebarNav items={roleNavItems} />
               </div>
 
-              <div className="pt-6 border-t border-border">
+              <div className="pt-6 border-t border-border space-y-2.5">
+                <LanguageToggle />
                 <form action={signOutAction}>
                   <Button
                     type="submit"
@@ -147,6 +154,7 @@ export default async function AppLayout({
               </div>
             </SheetContent>
           </Sheet>
+          </div>
         </header>
       )}
 
@@ -183,8 +191,9 @@ export default async function AppLayout({
           </nav>
         )}
 
-        {/* Pinned Sign Out Button (Always visible at bottom) */}
-        <div className="pt-4 border-t border-border mt-auto shrink-0">
+        {/* Pinned Language Toggle & Sign Out Button (Always visible at bottom) */}
+        <div className="pt-4 border-t border-border mt-auto shrink-0 space-y-2">
+          <LanguageToggle />
           <form action={signOutAction}>
             <Button
               type="submit"

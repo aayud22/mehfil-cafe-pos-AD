@@ -5,7 +5,7 @@ export type UserRole = Role; // Alias for backward compatibility
 export interface NavItem {
   href: string;
   label: string;
-  iconName: 'dashboard' | 'menu' | 'tables' | 'expenses' | 'stock' | 'vendors' | 'waiter' | 'kitchen' | 'cashier' | 'history';
+  iconName: 'dashboard' | 'reports' | 'menu' | 'tables' | 'expenses' | 'stock' | 'vendors' | 'staff' | 'waiter' | 'kitchen' | 'cashier' | 'history';
   roles: Role[];
 }
 
@@ -32,6 +32,12 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/owner',
     label: 'Owner Dashboard',
     iconName: 'dashboard',
+    roles: ['owner', 'manager'],
+  },
+  {
+    href: '/owner/reports',
+    label: 'Monthly Report',
+    iconName: 'reports',
     roles: ['owner', 'manager'],
   },
   {
@@ -62,6 +68,12 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/manager/vendors',
     label: 'Vendor Dues',
     iconName: 'vendors',
+    roles: ['owner', 'manager'],
+  },
+  {
+    href: '/manager/staff',
+    label: 'Staff & Payroll',
+    iconName: 'staff',
     roles: ['owner', 'manager'],
   },
   {
