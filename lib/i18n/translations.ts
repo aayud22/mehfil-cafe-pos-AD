@@ -23,6 +23,7 @@ export const translations = {
     // Navigation
     nav_dashboard: 'Owner Dashboard',
     nav_reports: 'Monthly Report',
+    nav_settings: 'Settings',
     nav_menu: 'Menu Catalog',
     nav_tables: 'Tables Layout',
     nav_expenses: 'Daily Expenses',
@@ -97,6 +98,7 @@ export const translations = {
     // Navigation
     nav_dashboard: 'मालिक डैशबोर्ड',
     nav_reports: 'मासिक रिपोर्ट',
+    nav_settings: 'सेटिंग्स',
     nav_menu: 'मेनू कैटलॉग',
     nav_tables: 'टेबल लेआउट',
     nav_expenses: 'दैनिक खर्च',

@@ -131,7 +131,15 @@ export function HistoryView({ initialRole, initialFilters }: HistoryViewProps) {
   const totalPages = Math.ceil(totalRows / pageSize) || 1;
 
   const getModeBadge = (mode: string) => {
-    switch (mode) {
+    const normalized = (mode || 'cash').toLowerCase();
+    if (normalized.includes('+')) {
+      return (
+        <Badge variant="outline" className="text-xs font-semibold border-amber-500/30 text-amber-400 bg-amber-500/10">
+          {mode}
+        </Badge>
+      );
+    }
+    switch (normalized) {
       case 'upi':
         return (
           <Badge variant="outline" className="text-xs font-semibold border-purple-500/30 text-purple-400 bg-purple-500/10">
@@ -284,6 +292,7 @@ export function HistoryView({ initialRole, initialFilters }: HistoryViewProps) {
                     <TableHead className="text-xs font-bold uppercase tracking-wider">Payment</TableHead>
                     <TableHead className="text-xs font-bold uppercase tracking-wider">Rounds</TableHead>
                     <TableHead className="text-xs font-bold uppercase tracking-wider">Cashier</TableHead>
+                    <TableHead className="text-right text-xs font-bold uppercase tracking-wider">Discount</TableHead>
                     <TableHead className="text-right text-xs font-bold uppercase tracking-wider">Total</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
@@ -317,6 +326,17 @@ export function HistoryView({ initialRole, initialFilters }: HistoryViewProps) {
                       <TableCell className="text-xs text-muted-foreground py-3">
                         <Link href={`/cashier/receipt/${row.receipt_id}`} className="block">
                           {row.cashier_name || 'Staff'}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right text-xs font-semibold py-3">
+                        <Link href={`/cashier/receipt/${row.receipt_id}`} className="block">
+                          {Number(row.discount_amount || 0) > 0 ? (
+                            <span className="text-amber-400">
+                              -{formatMoney(Number(row.discount_amount))}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </Link>
                       </TableCell>
                       <TableCell className="text-right font-black text-sm text-foreground py-3">

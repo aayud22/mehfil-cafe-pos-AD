@@ -6,116 +6,146 @@ import { formatMoney } from "@/lib/format"
 import { revalidatePath } from "next/cache"
 
 type PayTableResult =
-  | { ok: true; receiptId: string; total?: number }
+  | { ok: true; billId: string }
   | { ok: false; error: string }
 
+function mapFriendlyPayError(msg: string): string {
+  const lower = msg.toLowerCase()
+  if (lower.includes("above your limit")) {
+    return "This discount exceeds your role's maximum allowed percentage."
+  }
+  if (lower.includes("reason is required")) {
+    return "Please enter a reason for applying the discount."
+  }
+  if (lower.includes("cannot be more than the subtotal")) {
+    return "Discount cannot exceed the item subtotal."
+  }
+  if (lower.includes("must add up to the bill total")) {
+    return "Payment lines must add up to the exact bill total."
+  }
+  if (lower.includes("still being prepared")) {
+    return "Some orders for this table are still being prepared in the kitchen."
+  }
+  if (lower.includes("some selected items cannot be billed")) {
+    return "Some selected items were already billed or voided. Please refresh."
+  }
+  if (lower.includes("nothing to bill")) {
+    return "No served, unbilled items found to settle."
+  }
+  if (lower.includes("not allowed")) {
+    return "You do not have permission to settle bills."
+  }
+  return msg || "Unable to complete payment. Please try again."
+}
+
 export async function payTable(input: PayTableInput): Promise<PayTableResult> {
-  // Validate { table_id: uuid, mode: enum cash|upi|card } with Zod
   const parsed = payTableSchema.safeParse(input)
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.errors[0]?.message || "Invalid table payment payload",
+      error: parsed.error.errors[0]?.message || "Invalid payment details",
     }
   }
 
   const supabase = await createClient()
 
-  // Call pay_table RPC function (returns receipt_id uuid)
-  const { data, error } = await supabase.rpc("pay_table", {
-    p_table_id: parsed.data.table_id,
-    p_mode: parsed.data.mode,
-  })
+  try {
+    const { data, error } = await supabase.rpc("pay_table", {
+      p_table_id: parsed.data.table_id ?? null,
+      p_payments: parsed.data.payments,
+      p_order_id: parsed.data.order_id ?? null,
+      p_item_ids: parsed.data.item_ids ?? null,
+      p_discount_type: parsed.data.discount_type,
+      p_discount_value: parsed.data.discount_value,
+      p_discount_reason: parsed.data.discount_reason ?? null,
+    })
 
-  if (error) {
-    return { ok: false, error: error.message }
+    if (error) {
+      return { ok: false, error: mapFriendlyPayError(error.message) }
+    }
+
+    revalidatePath("/cashier")
+    revalidatePath("/owner")
+    revalidatePath("/waiter")
+    revalidatePath("/history")
+
+    return { ok: true, billId: String(data) }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Payment failed"
+    return { ok: false, error: mapFriendlyPayError(msg) }
   }
-
-  revalidatePath("/cashier")
-  revalidatePath("/owner")
-  revalidatePath("/waiter")
-
-  const receiptId = String(data)
-  const total = typeof data === "number" ? data : undefined
-
-  return { ok: true, receiptId, total }
 }
 
 export async function processPaymentAction(input: PaymentInput) {
-  // 1. Re-validate schema on the server
   const parsed = paymentSchema.safeParse(input)
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message || "Invalid payment details" }
   }
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  // 2. Recompute order total directly from database order items
   const { data: order, error: orderFetchErr } = await supabase
     .from("orders")
-    .select(`
+    .select(
+      `
       id,
       table_id,
       status,
-      order_items (
-        quantity,
-        unit_price
-      )
-    `)
+      order_items(quantity, unit_price, voided_at)
+    `
+    )
     .eq("id", parsed.data.order_id)
     .single()
 
   if (orderFetchErr || !order) {
-    return { error: "Order not found or inaccessible." }
+    return { error: "Order not found or inaccessible" }
   }
 
   if (order.status === "billed") {
-    return { error: "This order has already been paid and settled." }
+    return { error: "Order has already been billed and settled" }
   }
 
-  const items = (order.order_items as { quantity: number; unit_price: number }[]) || []
-  if (items.length === 0) {
-    return { error: "Cannot settle an order with no items." }
-  }
+  const items = (order.order_items || []) as Array<{
+    quantity: number
+    unit_price: number
+    voided_at?: string | null
+  }>
+  const computedTotal = items
+    .filter((item) => !item.voided_at)
+    .reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0)
 
-  // Exact server-computed total
-  const computedTotal = items.reduce(
-    (sum, item) => sum + Number(item.unit_price) * item.quantity,
-    0
-  )
-
-  // 3. Reject mismatch between client amount and recomputed server total
-  if (Math.abs(computedTotal - parsed.data.amount) > 0.01) {
+  if (Math.abs(parsed.data.amount - computedTotal) > 0.01) {
     return {
-      error: `Payment amount mismatch: Expected ${formatMoney(computedTotal)}, received ${formatMoney(parsed.data.amount)}. Transaction rejected.`,
+      error: `Payment amount (${formatMoney(parsed.data.amount)}) does not match database order total (${formatMoney(computedTotal)})`,
     }
   }
 
-  // 4. Record payment
   const { error: payErr } = await supabase.from("payments").insert({
-    order_id: order.id,
+    order_id: parsed.data.order_id,
     mode: parsed.data.mode,
     amount: computedTotal,
     received_by: user?.id || null,
   })
 
   if (payErr) {
-    return { error: `Failed to record payment: ${payErr.message}` }
+    return { error: payErr.message }
   }
 
-  // 5. Update order status to billed
-  const { error: orderUpdateErr } = await supabase
+  await supabase
     .from("orders")
     .update({ status: "billed" })
-    .eq("id", order.id)
+    .eq("id", parsed.data.order_id)
 
-  if (orderUpdateErr) {
-    return { error: `Failed to close order tab: ${orderUpdateErr.message}` }
-  }
+  const { data: remainingOrders } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("table_id", order.table_id)
+    .in("status", ["new", "preparing", "ready", "served"])
 
-  // 6. Free the table
-  if (order.table_id) {
+  if (!remainingOrders || remainingOrders.length === 0) {
     await supabase
       .from("cafe_tables")
       .update({ status: "free" })
@@ -125,6 +155,5 @@ export async function processPaymentAction(input: PaymentInput) {
   revalidatePath("/cashier")
   revalidatePath("/owner")
   revalidatePath("/waiter")
-
-  return { success: true, amount: computedTotal }
+  return { success: true }
 }

@@ -179,7 +179,10 @@ export default function OwnerDashboardPage() {
     );
   }
 
-  const sales = Number(stats.today_sales || 0);
+  const totalCollected = Number(stats.today_sales || 0);
+  const gstCollected = Number(stats.gst_collected_today || 0);
+  const netSales = Number(stats.net_sales_today ?? totalCollected - gstCollected);
+  const discountsGiven = Number(stats.discounts_today || 0);
   const expenses = Number(stats.today_expenses || 0);
   const profit = Number(stats.today_profit || 0);
   const totalOrders = stats.orders_count || 0;
@@ -214,13 +217,13 @@ export default function OwnerDashboardPage() {
         </Button>
       </div>
 
-      {/* KPI Stat Cards (Formatted with formatMoney for negatives like -₹2,980) */}
+      {/* KPI Stat Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Today's Sales */}
+        {/* Total Collected */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Today's Sales
+              Total collected
             </span>
             <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-500">
               <TrendingUp className="h-5 w-5" />
@@ -228,10 +231,30 @@ export default function OwnerDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl md:text-3xl font-extrabold text-foreground">
-              {formatMoney(sales)}
+              {formatMoney(totalCollected)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Gross billed revenue today
+              Net sales: {formatMoney(netSales)} · GST: {formatMoney(gstCollected)}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* GST & Discounts */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              GST & Discounts
+            </span>
+            <div className="rounded-lg bg-purple-500/10 p-2 text-purple-400">
+              <IndianRupee className="h-5 w-5" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl md:text-3xl font-extrabold text-foreground">
+              {formatMoney(gstCollected)}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              GST collected · Discounts given: {formatMoney(discountsGiven)}
             </p>
           </CardContent>
         </Card>
@@ -240,7 +263,7 @@ export default function OwnerDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Today's Expenses
+              Today&apos;s Expenses
             </span>
             <div className="rounded-lg bg-rose-500/10 p-2 text-rose-500">
               <TrendingDown className="h-5 w-5" />
@@ -256,11 +279,11 @@ export default function OwnerDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Today's Net Profit (Formatted to handle negative values cleanly) */}
+        {/* Net Profit (net sales minus expenses, excluding GST) */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Net Profit
+              Net Profit ({totalOrders} orders)
             </span>
             <div
               className={`rounded-lg p-2 ${
@@ -269,7 +292,7 @@ export default function OwnerDashboardPage() {
                   : 'bg-red-500/10 text-red-500'
               }`}
             >
-              <IndianRupee className="h-5 w-5" />
+              <ShoppingBag className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent>
@@ -281,27 +304,7 @@ export default function OwnerDashboardPage() {
               {formatMoney(profit)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Sales minus daily logged expenses
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Renamed: "Orders today" */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Orders today
-            </span>
-            <div className="rounded-lg bg-blue-500/10 p-2 text-blue-500">
-              <ShoppingBag className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl md:text-3xl font-extrabold text-foreground">
-              {totalOrders}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Customer dining tables handled
+              Net sales ({formatMoney(netSales)}) minus expenses
             </p>
           </CardContent>
         </Card>

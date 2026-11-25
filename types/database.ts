@@ -89,6 +89,9 @@ export interface Expense {
 export interface DashboardStats {
   date: string;
   today_sales: number;
+  gst_collected_today?: number;
+  discounts_today?: number;
+  net_sales_today?: number;
   today_expenses: number;
   today_profit: number;
   orders_count: number;
@@ -103,12 +106,49 @@ export interface BillRow {
   receipt_id: string;
   table_label: string;
   paid_at: string;
-  mode: PaymentMode;
+  mode: string;
   total: number;
   orders_count: number;
   cashier_name: string;
+  discount_amount?: number;
   total_rows: number | string;
   grand_total: number | string;
+}
+
+export interface AppSettings {
+  id: number;
+  cafe_name: string;
+  cafe_address: string | null;
+  gstin: string | null;
+  gst_enabled: boolean;
+  gst_rate: number;
+  cashier_max_discount_percent: number;
+  manager_max_discount_percent: number;
+}
+
+export interface Bill {
+  id: string;
+  table_id: string | null;
+  subtotal: number;
+  discount_type: 'none' | 'percent' | 'flat';
+  discount_value: number;
+  discount_amount: number;
+  discount_reason: string | null;
+  tax_rate: number;
+  tax_amount: number;
+  round_off: number;
+  total: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface BillPreview {
+  subtotal: number;
+  discount_amount: number;
+  tax_rate: number;
+  tax_amount: number;
+  round_off: number;
+  total: number;
 }
 
 export interface CancelledOrderRow {

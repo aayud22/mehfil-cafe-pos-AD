@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
   FileBarChart,
+  Settings,
   UtensilsCrossed,
   Grid,
   Wallet,
@@ -57,6 +58,14 @@ export function SidebarNav({ items, onItemClick }: SidebarNavProps) {
           <FileBarChart
             className={`h-5 w-5 shrink-0 transition-colors ${
               isActive ? 'text-violet-400 scale-105' : 'text-violet-400/70'
+            }`}
+          />
+        );
+      case 'settings':
+        return (
+          <Settings
+            className={`h-5 w-5 shrink-0 transition-colors ${
+              isActive ? 'text-slate-200 scale-105' : 'text-slate-400/70'
             }`}
           />
         );
