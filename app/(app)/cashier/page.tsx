@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { CafeTable, Order } from '@/types/database';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, formatTime } from '@/lib/format';
+import { getTableState, TABLE_STATE_META } from '@/lib/table-state';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { getOrderDisplayLabel } from '@/lib/order-label';
 import { Card } from '@/components/ui/card';
@@ -86,8 +87,13 @@ export default function CashierPage() {
           };
         });
 
-        // Sort by table label
-        billingList.sort((a, b) => a.table.label.localeCompare(b.table.label));
+        // Sort: bill_requested first, then by table label
+        billingList.sort((a, b) => {
+          const aReq = a.table.bill_requested_at ? 1 : 0;
+          const bReq = b.table.bill_requested_at ? 1 : 0;
+          if (aReq !== bReq) return bReq - aReq;
+          return a.table.label.localeCompare(b.table.label);
+        });
         setTableData(billingList);
       }
 
@@ -145,15 +151,23 @@ export default function CashierPage() {
         <div className="space-y-8">
           {tableData.length > 0 && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tableData.map(({ table, orders, grandTotal, hasActiveKitchenOrders }) => (
+          {tableData.map(({ table, orders, grandTotal, hasActiveKitchenOrders }) => {
+            const tableState = getTableState(table, orders);
+            const stateMeta = TABLE_STATE_META[tableState];
+
+            return (
             <Card
               key={table.id}
               className={`flex flex-col justify-between p-5 shadow-lg transition hover:border-primary/60 ${
-                hasActiveKitchenOrders ? 'bg-card' : 'border-primary/40 bg-primary/5'
+                tableState === 'bill_requested'
+                  ? 'border-rose-500/60 bg-rose-500/5 ring-1 ring-rose-500/30'
+                  : hasActiveKitchenOrders
+                  ? 'bg-card'
+                  : 'border-primary/40 bg-primary/5'
               }`}
             >
               <div>
-                <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="flex items-center justify-between border-b border-border pb-3 gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xl md:text-2xl font-black text-primary">
                       Table {table.label}
@@ -164,16 +178,16 @@ export default function CashierPage() {
                     </Badge>
                   </div>
 
-                  {hasActiveKitchenOrders ? (
-                    <Badge variant="warning" className="text-[11px] font-semibold gap-1">
-                      <ChefHat className="h-3 w-3" />
-                      <span>Waiting for kitchen</span>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <Badge variant="outline" className={`text-[11px] font-bold ${stateMeta.badgeClass}`}>
+                      {stateMeta.label}
                     </Badge>
-                  ) : (
-                    <Badge variant="success" className="text-[11px] font-bold">
-                      Ready for Billing
-                    </Badge>
-                  )}
+                    {table.bill_requested_at && (
+                      <span className="text-[10px] text-rose-400 font-mono">
+                        {formatTime(table.bill_requested_at)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Summary of rounds */}
@@ -233,7 +247,8 @@ export default function CashierPage() {
                 </Link>
               </div>
             </Card>
-          ))}
+            );
+          })}
             </div>
           )}
 

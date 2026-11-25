@@ -6,10 +6,22 @@ import { createClient } from '@/lib/supabase/client';
 import { MenuItem, MenuCategory, CafeTable, Order, UserRole, OrderStatus, ModifierGroup, ModifierOption } from '@/types/database';
 import { orderSchema, OrderInput } from '@/schemas/order';
 import { createOrderAction, updateOrderStatusAction } from '@/app/actions/orders';
+import { transferTableAction, requestBillAction } from '@/app/actions/tables';
 import { cancelOrder, voidOrderItem } from '@/app/actions/cancel';
 import { formatMoney, formatTime } from '@/lib/format';
+import { getTableState, TABLE_STATE_META } from '@/lib/table-state';
 import { CancelReasonDialog } from '@/components/orders/CancelReasonDialog';
 import { ModifierDrawer } from '@/components/orders/ModifierDrawer';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -39,6 +51,8 @@ import {
   X,
   Ban,
   CheckCircle2,
+  ArrowRightLeft,
+  Receipt,
 } from 'lucide-react';
 
 interface CartItem {
@@ -69,6 +83,11 @@ export default function WaiterOrderPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [modDrawerItem, setModDrawerItem] = useState<MenuItem | null>(null);
+  const [moveDrawerOpen, setMoveDrawerOpen] = useState(false);
+  const [freeTables, setFreeTables] = useState<CafeTable[]>([]);
+  const [confirmTransferTo, setConfirmTransferTo] = useState<CafeTable | null>(null);
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [isRequestingBill, setIsRequestingBill] = useState(false);
   const [isAddingMore, setIsAddingMore] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -328,6 +347,48 @@ export default function WaiterOrderPage({
     }
   };
 
+  const handleOpenMoveDrawer = async () => {
+    const { data } = await supabase
+      .from('cafe_tables')
+      .select('*')
+      .eq('status', 'free')
+      .neq('id', resolvedParams.tableId)
+      .order('label', { ascending: true });
+    setFreeTables((data as CafeTable[]) || []);
+    setMoveDrawerOpen(true);
+  };
+
+  const handleConfirmTransfer = async () => {
+    if (!table || !confirmTransferTo) return;
+    setIsTransferring(true);
+    const res = await transferTableAction({
+      from_table_id: table.id,
+      to_table_id: confirmTransferTo.id,
+    });
+    setIsTransferring(false);
+    if (!res.ok) {
+      toast.error('Transfer failed', { description: res.error });
+      return;
+    }
+    toast.success(`Moved Table ${table.label} to Table ${confirmTransferTo.label}`);
+    setConfirmTransferTo(null);
+    setMoveDrawerOpen(false);
+    router.push(`/waiter/orders/${confirmTransferTo.id}`);
+  };
+
+  const handleRequestBill = async () => {
+    if (!table) return;
+    setIsRequestingBill(true);
+    const res = await requestBillAction({ table_id: table.id });
+    setIsRequestingBill(false);
+    if (!res.ok) {
+      toast.error('Could not request bill', { description: res.error });
+      return;
+    }
+    toast.success(`Bill requested for Table ${table.label}`);
+    await loadData();
+  };
+
   const getOrderStatusBadge = (status: Order['status']) => {
     switch (status) {
       case 'new':
@@ -477,6 +538,8 @@ export default function WaiterOrderPage({
   }
 
   const isOccupiedWithOrders = existingOrders.length > 0;
+  const tableState = getTableState(table, existingOrders);
+  const stateMeta = TABLE_STATE_META[tableState];
 
   return (
     <div className="space-y-6 pb-24 lg:pb-8">
@@ -492,15 +555,12 @@ export default function WaiterOrderPage({
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-black text-foreground">
                 Table {table.label}
               </h1>
-              <Badge
-                variant={isOccupiedWithOrders ? 'destructive' : 'outline'}
-                className="text-xs font-bold"
-              >
-                {isOccupiedWithOrders ? 'Occupied' : 'Free Table'}
+              <Badge variant="outline" className={`text-xs font-bold ${stateMeta.badgeClass}`}>
+                {stateMeta.label}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -509,9 +569,28 @@ export default function WaiterOrderPage({
           </div>
         </div>
 
-        {/* View Switcher for Occupied Tables */}
+        {/* View Switcher & Table Actions for Occupied Tables */}
         {isOccupiedWithOrders && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenMoveDrawer}
+              className="h-11 gap-1.5 text-xs font-semibold"
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+              <span>Move table</span>
+            </Button>
+            <Button
+              variant={tableState === 'bill_requested' ? 'secondary' : 'outline'}
+              size="sm"
+              disabled={isRequestingBill || tableState === 'bill_requested'}
+              onClick={handleRequestBill}
+              className="h-11 gap-1.5 text-xs font-semibold"
+            >
+              <Receipt className="h-4 w-4" />
+              <span>{tableState === 'bill_requested' ? 'Bill requested' : 'Request bill'}</span>
+            </Button>
             <Button
               variant={!isAddingMore ? 'default' : 'outline'}
               size="sm"
@@ -863,6 +942,69 @@ export default function WaiterOrderPage({
           if (modDrawerItem) addToCart(modDrawerItem, selectedOptions, note);
         }}
       />
+
+      {/* Move Table Drawer */}
+      <Drawer open={moveDrawerOpen} onOpenChange={setMoveDrawerOpen}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Move Table {table.label}</DrawerTitle>
+            <DrawerDescription>
+              Select a free table to transfer all active rounds and orders.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="p-4">
+            {freeTables.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-6">
+                No free tables available right now.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {freeTables.map((ft) => (
+                  <Button
+                    key={ft.id}
+                    variant="outline"
+                    onClick={() => setConfirmTransferTo(ft)}
+                    className="h-14 flex flex-col items-center justify-center gap-0.5 font-bold"
+                  >
+                    <span className="text-base">{ft.label}</span>
+                    <span className="text-[11px] text-muted-foreground font-normal">
+                      {ft.seats} Seats
+                    </span>
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
+
+      {/* Confirm Table Transfer Dialog */}
+      <AlertDialog
+        open={Boolean(confirmTransferTo)}
+        onOpenChange={(open) => !open && setConfirmTransferTo(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Move Table {table.label} to Table {confirmTransferTo?.label}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All active rounds and kitchen tickets will be moved to Table {confirmTransferTo?.label}.
+              Table {table.label} will become free.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isTransferring}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmTransfer}
+              disabled={isTransferring}
+              className="font-bold"
+            >
+              {isTransferring ? 'Moving...' : 'Confirm Move'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

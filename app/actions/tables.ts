@@ -1,7 +1,14 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { tableSchema, TableInput } from "@/schemas/table"
+import {
+  tableSchema,
+  transferTableSchema,
+  requestBillSchema,
+  TableInput,
+  TransferTableInput,
+  RequestBillInput,
+} from "@/schemas/table"
 import { revalidatePath } from "next/cache"
 
 export async function createTableAction(input: TableInput) {
@@ -115,4 +122,55 @@ export async function deleteTableAction(id: string) {
   revalidatePath("/manager/tables")
   revalidatePath("/waiter")
   return { success: true }
+}
+
+export async function transferTableAction(input: TransferTableInput) {
+  const parsed = transferTableSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.errors[0]?.message || "Invalid transfer request" }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("transfer_table", {
+    p_from: parsed.data.from_table_id,
+    p_to: parsed.data.to_table_id,
+  })
+
+  if (error) {
+    const msg = error.message.toLowerCase()
+    if (msg.includes("not free")) {
+      return { ok: false as const, error: "Selected destination table is already occupied." }
+    }
+    if (msg.includes("no active orders")) {
+      return { ok: false as const, error: "Source table has no active orders to move." }
+    }
+    return { ok: false as const, error: error.message }
+  }
+
+  revalidatePath("/waiter")
+  revalidatePath("/kitchen")
+  revalidatePath("/cashier")
+  revalidatePath("/manager/tables")
+  return { ok: true as const }
+}
+
+export async function requestBillAction(input: RequestBillInput) {
+  const parsed = requestBillSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.errors[0]?.message || "Invalid table ID" }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("request_bill", {
+    p_table_id: parsed.data.table_id,
+  })
+
+  if (error) {
+    return { ok: false as const, error: error.message }
+  }
+
+  revalidatePath("/waiter")
+  revalidatePath("/cashier")
+  revalidatePath("/manager/tables")
+  return { ok: true as const }
 }

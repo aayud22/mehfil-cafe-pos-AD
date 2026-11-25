@@ -7,6 +7,7 @@ import { CafeTable, Order, OrderType } from '@/types/database';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { formatMoney, formatTime } from '@/lib/format';
 import { getOrderDisplayLabel } from '@/lib/order-label';
+import { getTableState, TABLE_STATE_META } from '@/lib/table-state';
 import { updateOrderStatusAction } from '@/app/actions/orders';
 import { cancelOrder } from '@/app/actions/cancel';
 import { CancelReasonDialog } from '@/components/orders/CancelReasonDialog';
@@ -32,6 +33,7 @@ import {
 export default function WaiterFloorPage() {
   const [activeTab, setActiveTab] = useState<OrderType>('dine_in');
   const [tables, setTables] = useState<CafeTable[]>([]);
+  const [dineInOrders, setDineInOrders] = useState<Order[]>([]);
   const [readyTableIds, setReadyTableIds] = useState<Set<string>>(new Set());
   const [offPremiseOrders, setOffPremiseOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,8 +47,13 @@ export default function WaiterFloorPage() {
   const { t } = useLanguage();
 
   const loadData = useCallback(async () => {
-    const [tableRes, readyRes, offPremiseRes] = await Promise.all([
+    const [tableRes, dineInRes, readyRes, offPremiseRes] = await Promise.all([
       supabase.from('cafe_tables').select('*').order('label', { ascending: true }),
+      supabase
+        .from('orders')
+        .select('id, table_id, status')
+        .in('status', ['new', 'preparing', 'ready', 'served'])
+        .not('table_id', 'is', null),
       supabase.from('orders').select('table_id').eq('status', 'ready').not('table_id', 'is', null),
       supabase
         .from('orders')
@@ -57,6 +64,7 @@ export default function WaiterFloorPage() {
     ]);
 
     if (tableRes.data) setTables(tableRes.data as CafeTable[]);
+    if (dineInRes.data) setDineInOrders(dineInRes.data as Order[]);
     if (readyRes.data) {
       setReadyTableIds(new Set<string>(readyRes.data.map((o) => o.table_id).filter(Boolean)));
     }
@@ -151,18 +159,22 @@ export default function WaiterFloorPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {tables.map((table) => {
             const isReady = readyTableIds.has(table.id);
+            const tableOrders = dineInOrders.filter((o) => o.table_id === table.id);
+            const tableState = getTableState(table, tableOrders);
+            const stateMeta = TABLE_STATE_META[tableState];
+
             return (
               <Link key={table.id} href={`/waiter/orders/${table.id}`} className="block">
                 <Card
                   className={`flex flex-col justify-between p-4 min-h-[150px] transition active:scale-[0.98] ${
                     isReady
                       ? 'border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/10'
-                      : table.status === 'occupied'
+                      : tableState !== 'free'
                       ? 'border-primary/60 bg-primary/10 hover:border-primary'
                       : 'bg-card hover:border-primary/50'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-1">
                     <span className="text-xl md:text-2xl font-black text-foreground">
                       {table.label}
                     </span>
@@ -173,10 +185,10 @@ export default function WaiterFloorPage() {
                       </Badge>
                     ) : (
                       <Badge
-                        variant={table.status === 'occupied' ? 'warning' : 'success'}
-                        className="text-[10px] uppercase font-bold"
+                        variant="outline"
+                        className={`text-[10px] uppercase font-bold ${stateMeta.badgeClass}`}
                       >
-                        {table.status === 'occupied' ? t('occupied') : t('free')}
+                        {stateMeta.label}
                       </Badge>
                     )}
                   </div>

@@ -56,6 +56,7 @@ export interface CafeTable {
   label: string;
   seats: number;
   status: TableStatus;
+  bill_requested_at?: string | null;
 }
 
 export type OrderStatus = 'new' | 'preparing' | 'ready' | 'served' | 'billed' | 'cancelled';
